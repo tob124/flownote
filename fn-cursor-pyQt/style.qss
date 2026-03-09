@@ -1,0 +1,185 @@
+/* FlowNote 深色极简主题 - 无边框、圆角、半透明滚动条 */
+
+QWidget {
+    background-color: #191919;
+    color: #D4D4D4;
+}
+
+QMainWindow {
+    background-color: #191919;
+}
+
+/* 侧边栏 */
+QListWidget#navList {
+    background-color: #202020;
+    border: none;
+    border-radius: 6px;
+    padding: 8px;
+    outline: none;
+}
+
+QListWidget#navList::item {
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: none;
+}
+
+QListWidget#navList::item:hover {
+    background-color: #2a2a2a;
+}
+
+QListWidget#navList::item:selected {
+    background-color: #2d5a7b;
+    color: #fff;
+}
+
+/* 输入框 */
+QLineEdit, QTextEdit, QPlainTextEdit {
+    background-color: #252525;
+    color: #D4D4D4;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    selection-background-color: #2d5a7b;
+}
+
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: #2a2a2a;
+}
+
+/* 密码框 */
+QLineEdit[echoMode="2"] {
+    font-family: Consolas, monospace;
+}
+
+/* 下拉框 */
+QComboBox {
+    background-color: #252525;
+    color: #D4D4D4;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    min-width: 120px;
+}
+
+QComboBox:hover {
+    background-color: #2a2a2a;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+    background: transparent;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #252525;
+    border: none;
+    border-radius: 6px;
+    selection-background-color: #2d5a7b;
+}
+
+/* 按钮 */
+QPushButton {
+    background-color: #2a2a2a;
+    color: #D4D4D4;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+}
+
+QPushButton:hover {
+    background-color: #333;
+}
+
+QPushButton:pressed {
+    background-color: #2d5a7b;
+}
+
+QPushButton:disabled {
+    background-color: #1a1a1a;
+    color: #666;
+}
+
+/* 滚动区域 */
+QScrollArea {
+    border: none;
+    background-color: transparent;
+    border-radius: 6px;
+}
+
+QScrollBar:vertical {
+    background: rgba(32, 32, 32, 0.6);
+    width: 10px;
+    border-radius: 5px;
+    margin: 2px 0;
+    border: none;
+}
+
+QScrollBar::handle:vertical {
+    background: rgba(180, 180, 180, 0.4);
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: rgba(200, 200, 200, 0.6);
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+    border: none;
+}
+
+QScrollBar:horizontal {
+    background: rgba(32, 32, 32, 0.6);
+    height: 10px;
+    border-radius: 5px;
+    margin: 0 2px;
+    border: none;
+}
+
+QScrollBar::handle:horizontal {
+    background: rgba(180, 180, 180, 0.4);
+    border-radius: 5px;
+    min-width: 30px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: rgba(200, 200, 200, 0.6);
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+    border: none;
+}
+
+/* 标签 */
+QLabel {
+    color: #D4D4D4;
+    border: none;
+}
+
+/* 分组框 */
+QGroupBox {
+    color: #D4D4D4;
+    border: 1px solid #333;
+    border-radius: 6px;
+    margin-top: 12px;
+    padding-top: 8px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    color: #aaa;
+}
+
+/* 笔记卡片容器 */
+QFrame#noteCard {
+    background-color: #252525;
+    border: none;
+    border-radius: 6px;
+    padding: 12px;
+}

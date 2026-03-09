@@ -1,0 +1,91 @@
+你好！我们要用 PyQt6 开发 FlowNote。请仔细阅读 `.cursorrules`，并帮我完成第一步：基础基建与极简 UI。
+
+1. **配置管理 (`config_manager.py`)：**
+   - 负责读取/保存配置到 `~/.flownote_config.json`。
+   - 配置字段：`sync_dir` (默认空), `api_provider` (Gemini/DeepSeek), `api_key`。
+   - 核心字段：`categories`，默认值为 `["工作", "个人", "学习", "灵感", "摘录", "Inbox"]`。
+
+2. **极简现代 QSS (`style.qss`或内联字符串)：**
+   - 编写全局样式：深色背景 (`#191919`)，侧边栏 (`#202020`)，文本色 (`#D4D4D4`)。
+   - 所有输入框、列表、按钮去掉默认边框 (`border: none;`)，加上 `border-radius: 6px;`。
+   - 极其细致的半透明自定义滚动条样式。
+   
+3. **主窗口 (`main.py`)：**
+   - 布局：左侧导航栏 (QListWidget)，包含 Inbox, All Notes, Wikis, Settings。右侧用 QStackedWidget 切换内容区。
+   - Settings 页面：包含 API Provider 下拉框、API Key 密码框。提供一个【选择同步目录】按钮 (`QFileDialog.getExistingDirectory`)。
+   - 选好目录后，立即使用 `os` 创建 `/notes`, `/wikis` 文件夹和空的 `inbox.txt`。
+   - 如果启动时未配置 sync_dir，强制展示 Settings 页面。
+
+请给出完整的代码。UI 必须优雅、现代、无边框感。
+
+UI 看起来棒极了！现在我们接入真实的本地文件系统，实现笔记的读写和收集箱处理。
+
+1. **新建 `file_service.py`：**
+   - `save_note(content)`：生成包含 13 位时间戳的 JSON 字典，状态为 `pending`，写入 `sync_dir/notes` 目录下。
+   - `load_all_notes()`：遍历 `sync_dir/notes`，只读取正则匹配 `^\d{13}\.json$` 的文件，解析 JSON 返回列表，按时间倒序排序。如果遇到损坏的 JSON，打印警告并跳过，绝不崩溃。
+
+2. **Inbox 原子消化机制 (`process_inbox`，需放在独立的 QThread 或启动时执行)：**
+   - 尝试 `os.rename('inbox.txt', 'processing.txt')`。如果抛出异常直接 return。
+   - 如果成功，立即 `open('inbox.txt', 'w').close()`。
+   - 读取 processing.txt，按连续空行 (`\n\n`) 分割文本。遍历有效文本，调用 `save_note`。最后删除 `processing.txt`。
+
+3. **UI 缝合 (更新 `main.py`)：**
+   - 在右侧新建 "Notes" 页面：上方是一个无边框的 QTextEdit 作为快捷输入区，按下 Shift+Enter 提交保存。
+   - 下方是 QScrollArea，用自定义 QWidget 渲染单条笔记卡片。卡片需显示内容、时间、Category、Tags 以及状态图标 (⏳ pending, ✅ done)。
+   - 启动应用时执行一次 `process_inbox()`，然后加载笔记列表。
+
+请使用原生 Python 的 os/json 模块实现，确保文件读写安全。
+
+现在进入核心的 AI 处理环节。我们要启动一个后台线程默默工作，并且彻底锁死 AI 乱建分类的幻觉。
+
+1. **新建 `ai_worker.py`：**
+   - 引入 `requests`，编写 `call_llm(provider, api_key, prompt, content)`。
+   - 编写 `safe_parse_json(text)`：用正则提取 `{}` 内容并 `json.loads`。
+
+2. **后台队列线程 (`AIQueueThread` 继承自 `QThread`)：**
+   - 无限循环：`while True: ... time.sleep(15)`。
+   - 扫描 `/notes` 寻找最多 3 条 `pending` 的笔记。
+   - 重点防撞：将这几条 JSON 的 `ai_status` 改为 `processing` 并写入硬盘。
+   - **Prompt 极严约束：** 动态读取 config 里的 `categories` 列表。在 Prompt 中严厉警告大模型：“你必须且只能从以下列表中选择 category：{categories}。绝不准创造新分类！如果你觉得都不符合，输出 'Inbox'”。
+   - 解析 LLM 结果：如果在返回的 JSON 中，category 不在允许列表中，Python 代码强制将其改为 'Inbox'。
+   - 成功则更新字段，设为 `done` 并落盘。失败则 `retry_count += 1`，>= 3 次设为 `failed`。
+   - 发射 `note_updated` 信号给主线程。
+
+3. **UI 联动：**
+   - 在主窗口启动 `AIQueueThread`。接收到 `note_updated` 信号时，重新读取列表刷新 UI。
+   - 强制约束：在 UI 渲染笔记卡片时，如果状态是 `done`，其对应的 QTextEdit 必须设为 `setReadOnly(True)`。
+
+现在实现极简的 Wiki 增量生成和阅读功能。我们不需要复杂的引用链接，只要优雅的纯文本排版。
+
+1. **修改 `ai_worker.py` (增量 Wiki 生成)：**
+   - 在笔记变为 `done` 且 category 不是 'Inbox' 时触发。
+   - 读取 `/wikis/{category}_{YYYY_MM}.md`。
+   - 调用 LLM，Prompt 设定为："你是一个知识整理助手。这是【{category}】的旧总结：\n{old_summary}\n用户新增了记录：\n{new_notes}\n请将新记录无缝融合进旧总结中，重写为结构清晰的 Markdown 长文。直接输出 Markdown 文本即可。"
+   - 将返回的 Markdown 覆盖写入 `.md` 文件。
+
+2. **Wiki 阅读器界面 (`main.py`)：**
+   - 在右侧新建 "Wikis" 页面。左侧用 QListWidget 展示 `/wikis` 目录下的所有文件名。
+   - 右侧放一个 `QTextBrowser`。
+   - 点击左侧文件名，读取 `.md` 内容。请使用 `markdown` 或 `markdown2` 库将其转换为 HTML，并调用 `QTextBrowser.setHtml(html_content)` 展示。
+   - 为 `QTextBrowser` 写一点基础的 CSS (在 html 字符串里拼接 `<style>`)，让标题、正文、列表看起来干净清爽。
+
+最后一步：开发分类管理中心，赋予用户修改和重构知识体系的能力。
+
+请在 Settings 页面中新增一个【分类管理面板 (Category Management)】，包含当前的 categories 列表，并实现以下 3 个功能：
+
+1. **新建分类：** 用户输入名字，追加到 config.json 的 categories 列表中并保存。
+
+2. **删除分类：**
+   - 从 config.json 中移除。
+   - **后台数据迁移：** 遍历 `/notes`，将所有 `category == 该分类` 的 JSON 文件，强制将 category 改为 `"Inbox"` 并重新保存。
+
+3. **合并分类 (将 A 合并到 B)：**
+   - 选择 A 和 B。
+   - 步骤 1：遍历 `/notes`，把所有 `category == A` 的 JSON 文件里的 category 改为 `B`，保存。
+   - 步骤 2 (物理拼接 Wiki)：找到 `/wikis/A_xxx.md` 和 `B_xxx.md` (当前月份)。把 A 的文本直接 Append (追加) 到 B 的文本末尾，并加上分隔符 `\n\n---\n来自 {A} 的合并\n\n`，保存 B 文件。
+   - 步骤 3：删除 A 的 `.md` 文件。
+   - 步骤 4：从 config.json 移除分类 A。
+
+请务必注意，步骤 2、3 中的文件读写和修改都需要使用 try-except 包裹。如果有任何一个文件操作失败，仅在控制台打印 log，不要导致程序崩溃。
+
+完成后，我们的 FlowNote 就彻底打造完毕了！

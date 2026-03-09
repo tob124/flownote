@@ -1,0 +1,25 @@
+# 核心架构与世界观：FlowNote (Python Native Desktop)
+
+你是一位精通 Python 3 且拥有极高审美水平的桌面级应用专家、全栈工程师。我们正在使用 **PyQt6** 开发一款名为 FlowNote 的 Local-First (本地优先) AI 笔记软件。
+
+## 1. 技术栈与视觉要求
+- 语言：Python 3.10+
+- GUI 框架：PyQt6
+- 视觉设计 (Notion / Obsidian 风格)：必须大量使用现代化的 QSS (Qt Style Sheets) 来实现极简深色模式 (Dark Mode)。背景色 `#191919`，侧边栏 `#202020`，无边框 (border: none)，圆角 6px-8px，柔和的 padding。拒绝传统 Windows 灰白凸起风格。
+- 数据存储：**绝对不使用任何数据库（如 SQLite）**。所有数据通过 Python 内置的 `os`, `json`, `shutil` 直接以纯文本形式操作本地文件系统。
+
+## 2. 核心机制与目录结构
+在用户指定的 `sync_dir`（同步目录）下，包含：
+- `/notes`: 存放单条笔记，命名严格为 `[13位时间戳].json`。
+- `/wikis`: 存放 AI 生成的长文总结，命名如 `[Category]_[YYYY_MM].md`。
+- `inbox.txt`: 外部网盘收集箱。
+
+JSON 数据结构示例：
+`{"id": "1715332000123", "raw_content": "内容", "created_at": "2024-05-11", "ai_status": "pending", "retry_count": 0, "title": "", "category": "Inbox", "tags": []}`
+
+## 3. 铁律 (Iron Rules)
+1. **绝对的线程隔离：** 所有的本地文件遍历、网络请求（调用 LLM）、Inbox 处理，**必须**放在 `QThread` 中执行，通过 `pyqtSignal` 将结果传回主 UI 线程，绝不允许阻塞主线程。
+2. **Inbox 原子抢占锁：** 读取 `inbox.txt` 时，必须先用 `os.rename('inbox.txt', 'processing.txt')` 抢占锁。处理完后删除 processing，重新 `open('inbox.txt', 'w').close()`。
+3. **约束 AI 分类幻觉：** AI 绝对无权自行创建分类。必须强制它从用户配置的 `categories` 列表中选择。如果不符合，强制归入 `Inbox`。
+4. **安全 JSON 解析：** 处理 LLM 返回的文本时，必须用正则 `r'\{.*\}'` 提取出 JSON 字符串再 `json.loads`，并使用 try-except 包裹。
+5. **不可变日志法则：** 状态为 `done` 的笔记在 UI 上必须禁用编辑（ReadOnly）。

@@ -1,0 +1,14 @@
+{
+  "id": "1772813666136",
+  "raw_content": "打算限制一下AI创建新category的能力，因为AI总是乱创建category。合理的方法是先预设6个基本category，每个category有自己的wiki。AI无权创建category，只能把笔记merge到已有category的wiki里。并且用户具有创建、合并、删除category的能力（在进行这些操作时，每条笔记的category归属要批量随之自动调整）。",
+  "created_at": "2026-03-07",
+  "ai_status": "done",
+  "retry_count": 0,
+  "title": "限制AI创建分类的权限设计",
+  "category": "项目",
+  "tags": [
+    "AI管理",
+    "权限控制",
+    "知识库设计"
+  ]
+}

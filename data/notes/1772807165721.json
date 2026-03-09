@@ -1,0 +1,16 @@
+{
+  "id": "1772807165721",
+  "raw_content": "当今的大模型（包括 Claude 3.5 Sonnet / Gemini / DeepSeek）被喂了海量的 Python 代码。它们写 PyQt 桌面应用的能力甚至远超写 React。",
+  "created_at": "2026-03-06T14:26:05.721Z",
+  "ai_status": "done",
+  "retry_count": 0,
+  "title": "大模型编程能力对比",
+  "category": "Tech",
+  "tags": [
+    "AI编程",
+    "Python",
+    "大模型",
+    "PyQt",
+    "React"
+  ]
+}

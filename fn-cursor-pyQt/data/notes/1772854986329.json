@@ -1,0 +1,14 @@
+{
+  "id": "1772854986329",
+  "raw_content": "1.美化用户界面，使之更易用\n2.打算限制一下AI创建新category的能力，因为AI总是乱创建category。合理的方法是先预设6个基本category，每个category有自己的wiki。AI无权创建category，只能把笔记merge到已有category的wiki里。并且用户具有创建、合并、删除category的能力（在进行这些操作时，每条笔记的category归属要批量随之自动调整）。\n3.由于AI遵循指令的能力非常差，我们计划删除wiki中的“显示细节”feature。",
+  "created_at": "2026-03-07 03:43",
+  "ai_status": "done",
+  "retry_count": 0,
+  "title": "界面美化与AI功能调整计划",
+  "category": "项目",
+  "tags": [
+    "用户界面",
+    "AI限制",
+    "功能删除"
+  ]
+}

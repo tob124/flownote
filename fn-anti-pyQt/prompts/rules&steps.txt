@@ -1,0 +1,90 @@
+# 核心架构与世界观：FlowNote (Python Native Desktop)
+
+你是一位精通 Python 3 且拥有极高审美水平的桌面级应用专家。我们正在使用 **PyQt6** 开发一款名为 FlowNote 的 Local-First (本地优先) AI 笔记软件。
+
+## 1. 技术栈与视觉要求
+- 语言：Python 3.10+
+- GUI 框架：PyQt6
+- 样式设计：必须大量使用现代化的 QSS (Qt Style Sheets) 来模拟类似于 Tailwind CSS 的极简风格（深色模式、圆角、无边框输入框、柔和的阴影等），拒绝传统 Windows 灰白丑陋风格。
+- 核心要求：**绝对不使用任何数据库（如 SQLite）**。所有数据通过 Python 内置的 `os`, `json`, `shutil` 直接以纯文本形式操作本地文件系统。
+
+## 2. 核心机制与目录结构
+用户在设置中指定一个 `sync_dir`（同步目录）。该目录下包含：
+- `/notes`: 存放单条笔记，命名严格为 `[13位时间戳].json`。
+- `/wikis`: 存放 AI 生成的长文总结，命名如 `[Category]_[YYYY_MM].md`。
+- `inbox.txt`: 外部网盘收集箱。
+
+JSON 数据结构示例：
+`{"id": "1715332000123", "raw_content": "内容", "created_at": "2024-05-11", "ai_status": "pending", "retry_count": 0, "title": "", "category": "Inbox", "tags": []}`
+
+## 3. 铁律 (Iron Rules)
+1. **绝对的线程隔离：** 所有的本地文件遍历、网络请求（调用大模型 API）、Inbox 处理，**必须**放在 `QThread` 中执行，通过 `pyqtSignal` 将结果传回主 UI 线程，绝不允许阻塞主线程导致界面卡死。
+2. **Inbox 消化原子操作：** 读取 `inbox.txt` 时，必须先用 `os.rename(inbox, processing)` 抢占锁。处理完后删除 processing，重新 `open(inbox, 'w').close()`。
+3. **安全 JSON 解析：** 处理 LLM 返回的文本时，必须写一个辅助函数，用正则 `r'\{.*\}'` 提取出 JSON 字符串再 `json.loads`，并使用 try-except 包裹。
+4. **持久化配置：** 使用 `configparser` 或简单的 `config.json` 存放在 `os.path.expanduser('~/.flownote_config.json')` 中，保存 API Key 和 sync_dir。
+
+
+你好，我们要用 PyQt6 开发 FlowNote 本地笔记应用。请帮我完成第一步：
+
+1. 创建 `main.py` 和 `config_manager.py`。
+2. `config_manager.py` 负责读取/保存配置到用户目录下的 `~/.flownote_config.json`。配置包含：`sync_dir`, `api_provider` (Gemini/DeepSeek), `api_key`。
+3. 在 `main.py` 中编写 PyQt6 主窗口 (`MainWindow`)。
+   - 布局：左侧导航栏（QListWidget 模拟，包含 Inbox, All Notes, Wikis, Settings），右侧为内容区（使用 QStackedWidget 切换页面）。
+   - **视觉要求极其重要：** 请为应用编写一份极其现代化的 QSS 样式表。使用深色主题 (Dark Mode)，背景色 `#1E1E1E`，侧边栏 `#252526`，文字 `#CCCCCC`，卡片圆角 8px，移除自带的边框。
+4. 实现 Settings 页面：
+   - 包含：API Provider 下拉框，API Key 密码框。
+   - 包含：选择 Sync Dir 的按钮（点击调用 `QFileDialog.getExistingDirectory`），选好后立即用 Python 的 `os` 库在该目录下创建 `/notes`, `/wikis` 目录和空的 `inbox.txt` 文件。
+   - 保存配置。如果启动时未配置，强制显示 Settings 页面。
+
+请给出完整的代码。
+
+太棒了，没有任何 Web 沙盒阻碍的感觉真好！现在实现本地 CRUD 和收集箱消化机制。
+
+1. 新建 `file_service.py`。
+2. **笔记操作：**
+   - `save_note(content)`：生成包含 13 位时间戳的 JSON 字典，写入 `sync_dir/notes` 目录下，初始状态为 `pending`。
+   - `load_all_notes()`：遍历 `sync_dir/notes`，只读取匹配正则 `^\d{13}\.json$` 的文件，解析 JSON 返回列表，按时间倒序排序。
+3. **Inbox 原子消化机制：**
+   - `process_inbox()`：尝试 `os.rename('inbox.txt', 'processing.txt')`。如果抛出异常则直接 return（说明文件正被外部网盘锁住）。
+   - 如果成功，立即 `open('inbox.txt', 'w').close()` 创建新空文件。
+   - 读取 processing.txt，按连续空行分割成多段文本，忽略空白。针对每段文本调用 `save_note()`，最后 `os.remove('processing.txt')`。
+4. **UI 缝合：**
+   - 右侧新建 "Notes" 页面：上方是一个多行文本框 (QTextEdit) 作为无阻力输入区，按下 Shift+Enter 提交保存。下方是一个 QScrollArea，里面用自定义 QWidget 渲染单条笔记卡片。
+   - 应用启动时执行一次 `process_inbox()`，然后加载列表。
+
+请使用最原生的 Python 文件操作来实现，并确保异常处理得当。
+
+现在进入核心的 AI 处理环节。为了不卡死 UI，我们必须使用 QThread。
+
+1. 新建 `ai_worker.py`。
+2. 引入 `requests` 库调用 API。编写 `call_llm(provider, api_key, prompt)` 函数。
+   - Prompt 要求严格输出 JSON，包含 title, category, tags。
+   - 写一个 `safe_parse_json(text)` 用正则提取大括号内容，配合 try-except 防御崩溃。
+3. **编写 `AIQueueThread(QThread)` 类：**
+   - 它是一个后台长连接线程，内部有一个无限循环：`while True: ... time.sleep(15)`。
+   - 每次循环扫描 `/notes` 目录寻找 `pending` 笔记（最多处理 3 个）。
+   - **防冲突设计：** 处理前，先将 JSON 中的 `ai_status` 改为 `processing` 并写入硬盘。
+   - 调用 `call_llm` 获取分类和标题。
+   - 成功则更新为 `done` 并写入硬盘。失败则检查 `retry_count`，>= 3 则设为 `failed`。
+   - 每处理完一条，通过 `pyqtSignal` 发射一个 `note_updated` 信号给主线程。
+4. **UI 联动：**
+   - 主窗口启动时，启动这个 `AIQueueThread`。
+   - 主窗口连接 `note_updated` 信号，收到信号后重新调用 `load_all_notes()` 刷新界面卡片。UI 上处于 `done` 状态的卡片应禁用编辑功能。
+
+请给出优雅的线程实现代码。
+
+最后一步，我们要实现动态 Wiki 和 Markdown 阅读器。
+
+1. 修改 `ai_worker.py`。当某条笔记成功从 pending 变为 done，且 category 不是 Inbox 时，触发 Wiki 增量更新机制（也在线程中执行）。
+   - 读取 `/wikis/目标分类_当前月份.md` 的旧内容。
+   - 调用 LLM，要求将新笔记融入旧总结，并在文本中插入 markdown 引用如 `[细节](1715332000)`。
+   - 覆写 `.md` 文件。
+
+2. **Wiki 阅读器界面：**
+   - 右侧新建 "Wikis" 页面。左侧是一个 QListWidget 展示 `/wikis` 目录下的所有文件。
+   - 右侧是一个 `QTextBrowser`。
+   - 当点击左侧文件名时，读取 `.md` 文件内容。
+   - **核心黑魔法：** Python 的 `QTextBrowser` 原生支持简单的 Markdown 渲染！请使用 `markdown2` 库将 .md 转为 html 后喂给 `QTextBrowser`。
+   - 开启 `QTextBrowser` 的 `setOpenLinks(False)`，然后连接它的 `anchorClicked` 信号。如果用户点击了 `[细节](1715332000)` 这个超链接，拦截它，从 URL 里提取出 ID，弹出一个自定义 QMessageBox 或 QDialog 展示对应原始 JSON 笔记的内容！
+
+请帮我完成最后这块拼图！

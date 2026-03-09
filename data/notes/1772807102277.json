@@ -1,0 +1,16 @@
+{
+  "id": "1772807102277",
+  "raw_content": "在操作过程中我发现，您当前的工作目录 fn-cursor-fix 中遗失了 src-tauri 文件夹（这意味着缺少所有的 Tauri 后端环境及图标、配置信息）。这应该是您从 fn-cursor 目录复制过来进行除错时，不小心漏掉了这个关键文件夹。",
+  "created_at": "2026-03-06T14:25:02.277Z",
+  "ai_status": "done",
+  "retry_count": 0,
+  "title": "Tauri项目文件夹缺失提醒",
+  "category": "Tech",
+  "tags": [
+    "Tauri",
+    "项目结构",
+    "故障排除",
+    "开发环境",
+    "文件管理"
+  ]
+}

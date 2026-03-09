@@ -1,0 +1,5 @@
+{
+  "name": "FlowNote",
+  "description": "A minimalist, local-first AI note-taking app. Capture First, Organize Never.",
+  "requestFramePermissions": []
+}
