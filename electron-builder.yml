@@ -1,0 +1,39 @@
+appId: com.flownote.app
+productName: FlowNote
+copyright: Copyright 2026
+
+directories:
+  buildResources: resources
+  output: release
+
+npmRebuild: false
+
+files:
+  - out/**/*
+  - package.json
+  - resources/icon.png
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.png
+  signAndEditExecutable: false
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: resources/icon.png
+  category: public.app-category.productivity
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: resources/icon.png
+  category: Office

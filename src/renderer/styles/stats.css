@@ -1,0 +1,182 @@
+.stats-page {
+  padding: 24px 28px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.stats-header {
+  margin-bottom: 20px;
+}
+
+.stats-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stats-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.stats-extra {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+.stats-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 20px 0 10px;
+}
+
+.heatmap-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  overflow: hidden;
+}
+
+.heatmap-scroll {
+  overflow-x: auto;
+  flex: 1;
+}
+
+.heatmap-grid {
+  display: flex;
+  gap: 3px;
+}
+
+.heat-week {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.heat-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.heatmap-grid .heat-cell.lv0,
+.heat-cell.lv0 {
+  background: var(--heat-0);
+}
+
+.heatmap-grid .heat-cell.lv1,
+.heat-cell.lv1 {
+  background: var(--heat-1);
+}
+
+.heatmap-grid .heat-cell.lv2,
+.heat-cell.lv2 {
+  background: var(--heat-2);
+}
+
+.heatmap-grid .heat-cell.lv3,
+.heat-cell.lv3 {
+  background: var(--heat-3);
+}
+
+.heatmap-grid .heat-cell.lv4,
+.heat-cell.lv4 {
+  background: var(--heat-4);
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.cat-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cat-name {
+  width: 72px;
+  font-size: 13px;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.cat-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-input);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cat-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.cat-count {
+  width: 32px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.stats-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}

@@ -1,0 +1,35 @@
+.minimap {
+  position: relative;
+  width: 16px;
+  min-width: 16px;
+  border-left: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+}
+
+.minimap-mark {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-muted);
+  opacity: 0.55;
+}
+
+.minimap-mark.active {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.minimap-window {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(212, 165, 116, 0.12);
+  border-left: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+  pointer-events: none;
+}

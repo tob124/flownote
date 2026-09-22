@@ -1,0 +1,503 @@
+.note-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-card);
+  transition: all 0.25s ease;
+  animation: fadeIn 0.3s ease;
+}
+
+/* 列表视图：单列纵向排列 */
+.note-list-column {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 双列网格（瀑布流式）：卡片高度随文本自适应 */
+.note-list-grid {
+  padding: 0 16px;
+  column-count: 2;
+  column-gap: 12px;
+}
+
+.note-list-grid .note-card {
+  break-inside: avoid;
+  margin-bottom: 12px;
+  display: inline-block;
+  width: 100%;
+}
+
+/* 视图切换条 */
+.note-list-viewbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 16px 10px;
+}
+
+.note-list-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.note-list-views {
+  display: flex;
+  gap: 4px;
+}
+
+.note-list-view-btn {
+  border: 1px solid var(--border-light);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.note-list-view-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.note-list-view-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(212, 165, 116, 0.12);
+}
+
+.note-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.note-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.note-card-category {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color: var(--accent-text);
+  letter-spacing: 0.3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.note-card-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.note-card-status {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  margin-left: auto;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.note-card-status.pending {
+  color: #9e9e9e;
+  background: rgba(158, 158, 158, 0.12);
+  border: 1px solid rgba(158, 158, 158, 0.2);
+}
+
+.note-card-status.processing {
+  color: #2196F3;
+  background: rgba(33, 150, 243, 0.12);
+  border: 1px solid rgba(33, 150, 243, 0.2);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.note-card-status.done {
+  color: #4caf50;
+  background: rgba(76, 175, 80, 0.12);
+  border: 1px solid rgba(76, 175, 80, 0.2);
+}
+
+.note-card-status.failed {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.12);
+  border: 1px solid rgba(244, 67, 54, 0.2);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.note-card-delete-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.note-card-delete-btn:hover {
+  color: var(--danger);
+  background: rgba(244, 67, 54, 0.1);
+  transform: scale(1.1);
+}
+
+.note-card-body {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-sans);
+}
+
+.note-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.note-card-summary {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  opacity: 0.85;
+  margin-bottom: 6px;
+  line-height: 1.5;
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+}
+
+/* 网格视图中限制正文高度，便于一眼浏览 */
+.note-list-grid .note-card-body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 8;
+  overflow: hidden;
+  max-height: 14em;
+}
+
+.note-card-body textarea {
+  width: 100%;
+  min-height: 60px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  line-height: 1.6;
+  transition: border-color 0.2s ease;
+}
+
+.note-card-body textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(212, 165, 116, 0.1);
+}
+
+.note-card-tags {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--accent);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.note-card-tags span {
+  padding: 2px 8px;
+  background: rgba(212, 165, 116, 0.08);
+  border-radius: 10px;
+  border: 1px solid rgba(212, 165, 116, 0.15);
+  transition: all 0.2s ease;
+}
+
+.note-card-tags span:hover {
+  background: rgba(212, 165, 116, 0.15);
+  transform: translateY(-1px);
+}
+
+.note-card-attach-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  transition: all 0.2s ease;
+}
+
+.note-card-attach-btn:hover {
+  color: var(--accent);
+  background: rgba(212, 165, 116, 0.12);
+  transform: scale(1.1);
+}
+
+.note-card-tip {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--accent);
+  background: rgba(212, 165, 116, 0.08);
+  border: 1px solid rgba(212, 165, 116, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  animation: fadeIn 0.3s ease;
+}
+
+/* 网格视图：查看全文按钮 */
+.note-card-detail-btn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.note-card-detail-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(212, 165, 116, 0.08);
+}
+
+/* 笔记详情弹窗 */
+.note-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2100;
+  animation: fadeIn 0.2s ease;
+}
+
+.note-detail-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  color: var(--text-primary);
+  width: min(920px, 94vw);
+  height: min(88vh, 900px);
+  display: flex;
+  flex-direction: column;
+  padding: 28px 40px;
+  position: relative;
+  overflow: hidden;
+  animation: zoomIn 0.18s ease;
+}
+
+/* 沉浸式阅读窗口右上角的全局关闭按钮 */
+.note-detail-exit {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  z-index: 5;
+}
+
+.note-detail-exit:hover {
+  color: var(--danger);
+  background: rgba(244, 67, 54, 0.12);
+}
+
+.note-detail-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding-right: 40px;
+}
+
+.note-detail-title {
+  flex: 1;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.note-detail-cat {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-left: 8px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color: var(--accent-text);
+  vertical-align: middle;
+}
+
+.note-detail-summary {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  opacity: 0.9;
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--accent);
+}
+
+.note-detail-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.note-detail-content {
+  font-size: 15px;
+  line-height: 1.9;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-sans);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* --- Attachment list --- */
+.attachment-list {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.attachment-item {
+  position: relative;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  background: var(--bg-input);
+  max-width: 180px;
+  overflow: hidden;
+}
+
+.attachment-item.missing {
+  border-color: var(--danger);
+  background: rgba(244, 67, 54, 0.06);
+}
+
+.attachment-name {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  word-break: break-all;
+  padding: 0;
+}
+
+.attachment-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attachment-remove {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-remove:hover {
+  color: var(--danger);
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.attachment-img img {
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: 4px;
+  display: block;
+  cursor: pointer;
+}
+
+.attachment-missing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attachment-missing button {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.attachment-missing button:first-of-type {
+  border-color: var(--accent);
+  color: var(--accent);
+}

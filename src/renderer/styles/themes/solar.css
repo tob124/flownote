@@ -1,0 +1,39 @@
+[data-theme="solar"] {
+  --bg-primary: #fdf6e3;
+  --bg-secondary: #f5eedc;
+  --bg-card: #fffdf5;
+  --bg-input: #fffdf5;
+  --bg-sidebar: #f8f1de;
+  --bg-hover: #eee7d5;
+  --bg-scrollbar-track: transparent;
+  --bg-scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --bg-scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+  --text-primary: #3d3328;
+  --text-secondary: #6b5e4f;
+  --text-muted: #9b8e7f;
+  --accent: #b58900;
+  --accent-hover: #a07800;
+  --accent-text: #fdf6e3;
+  --danger: #dc322f;
+  --danger-hover: #cb4b16;
+  --border: #d8d0c4;
+  --border-light: #e8e0d8;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --heat-0: #eee8d5;
+  --heat-1: #e4dcc5;
+  --heat-2: #cbae7a;
+  --heat-3: #b58900;
+  --heat-4: #7a5f00;
+  /* markdown 多级配色（仿 VSCode，各层级色相区分且柔和） */
+  --md-h1: #b58900;
+  --md-h2: #cb4b16;
+  --md-h3: #268bd2;
+  --md-h4: #859900;
+  --md-h5: #6c71c4;
+  --md-h6: #9b8e7f;
+  --md-code-inline: #d33682;
+}

@@ -1,0 +1,10 @@
+todo: (2026-08-06 全部完成)
+
+[x] 安装后应用无法正常显示自定义图标（dev 环境正常）— 部分完成：electron-builder.yml 的 files 白名单补上 resources/icon.png（打包后 app.asar 内含图标，src/main/index.ts 的窗口图标路径无需改代码），窗口图标已修复；NSIS 安装包图标已用上新图标（v2.6.0）。但安装后的 FlowNote.exe 图标仍是默认 Electron 图标——electron-builder 26 的 rcedit 内置于 winCodeSign 包，其 7z 含 darwin 符号链接，非管理员进程解压失败（“客户端没有所需的特权”）。彻底解决需管理员终端执行 npx electron-builder --win（或开启开发者模式），届时把 electron-builder.yml 的 signAndEditExecutable 改回 true 即可。
+[x] 启动默认显示 settings 而不是 all notes — 已修复：src/renderer/App.tsx 的重定向 effect 用 ConfigContext 的 isLoaded 门控，配置加载完成且 sync_dir 为空（全新安装）才跳 Settings，正常配置启动后停在 All Notes。
+[x] inbox 读取慢、开启后看不到正在处理的笔记 — 已修复：src/main/services/inbox-watcher.ts 重写为旧版逻辑（去掉 fs.watch），启动后立即读取一次 + 每 10 秒轮询一次；坚果云在关机期间写入的文件开机即处理。另外在 inbox 处理出新笔记后 poke 分类器，分类不再等 15 秒轮询。
+[x] 换行符无法识别、笔记无法分割 — 已修复：src/main/store/inbox-store.ts 分割前统一换行符（去 BOM、CRLF/单独 CR 归一化为 LF、空白行含空格也可作分隔）；src/main/services/wiki-writer.ts 的 stripHeading 同样归一化。
+[x] deepseek 接口 /chat → /flash — 已核实并回滚：实测 /v1/chat/completions + deepseek-v4-flash 返回 200 正常出结果，/v1/flash/completions 等路径均 404。DeepSeek V4 迁移公告实为“模型名”从 deepseek-chat 改为 deepseek-v4-flash（端点不变），而代码中模型名早已是 deepseek-v4-flash，无需改动。原 todo 描述系对公告的误读。
+[x] 默认 categories 与 legacy 不符 — 已修复：src/shared/types.ts 的 DEFAULT_CATEGORIES 改为 个人、工作、想法、项目、学习（不迁移已有配置文件，仅新安装生效）。
+
+2026-08-06 追加：版本号升为 2.6.0（package.json / package-lock.json / Sidebar 页脚）；新图标 resources/icon.png（Snipaste 图补边 512x512）；Windows 安装包 release\FlowNote Setup 2.6.0.exe 打包成功。注意：清华 npm 镜像不提供 electron 包（404），.npmrc 已改用 npmmirror。

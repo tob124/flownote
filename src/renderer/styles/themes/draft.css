@@ -1,0 +1,39 @@
+[data-theme="draft"] {
+  --bg-primary: #f7f7f7;
+  --bg-secondary: #efefef;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-sidebar: #f0f0f0;
+  --bg-hover: #e5e5e5;
+  --bg-scrollbar-track: transparent;
+  --bg-scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --bg-scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+  --text-primary: #2c2c2c;
+  --text-secondary: #555555;
+  --text-muted: #888888;
+  --accent: #6c6c6c;
+  --accent-hover: #555555;
+  --accent-text: #ffffff;
+  --danger: #d32f2f;
+  --danger-hover: #b71c1c;
+  --border: #d0d0d0;
+  --border-light: #e0e0e0;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --heat-0: #f0f0f0;
+  --heat-1: #e0e0e0;
+  --heat-2: #bfbfbf;
+  --heat-3: #8a8a8a;
+  --heat-4: #4a4a4a;
+  /* markdown 多级配色（仿 VSCode，各层级色相区分且柔和） */
+  --md-h1: #3f3f3f;
+  --md-h2: #6c6c6c;
+  --md-h3: #4a7aa8;
+  --md-h4: #5f8f6a;
+  --md-h5: #7a6ba8;
+  --md-h6: #888888;
+  --md-code-inline: #b35656;
+}

@@ -1,0 +1,120 @@
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'kern' 1, 'liga' 1;
+}
+
+:root {
+  --font-sans: 'Source Sans Pro', 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+/* 纸张纹理背景 */
+body {
+  background-image: 
+    radial-gradient(circle at 20% 30%, rgba(120, 119, 198, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(255, 165, 0, 0.02) 0%, transparent 50%);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* 自定义滚动条（wiki 正文用，替换原生以支持指针捕获拖动） */
+.vscrollbar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.vscrollbar-thumb {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  border-radius: 4px;
+  background: var(--bg-scrollbar-thumb, rgba(128, 128, 128, 0.25));
+  transition: background 0.15s ease;
+}
+
+.vscrollbar-thumb:hover,
+.vscrollbar:active .vscrollbar-thumb,
+.vscrollbar-thumb:active {
+  background: var(--bg-scrollbar-thumb-hover, rgba(128, 128, 128, 0.45));
+}
+
+/* 隐藏 .markdown-body 的原生滚动条，交由自定义滚动条接管 */
+.markdown-body {
+  scrollbar-width: none;
+}
+
+.markdown-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* 平滑过渡效果 */
+* {
+  transition-property: background-color, border-color, color, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+
+/* 禁用特定元素的过渡 */
+input, textarea, button, a {
+  transition-property: background-color, border-color, color, box-shadow, transform;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
