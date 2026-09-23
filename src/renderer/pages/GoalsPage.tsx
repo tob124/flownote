@@ -57,19 +57,26 @@ export default function GoalsPage(): JSX.Element {
       setLoading(false)
       return () => { active = false }
     }
-    void Promise.all([window.api.goals.list(), window.api.notes.loadAll(), window.api.collections.list()])
-      .then(([result, allNotes, topics]) => {
+    void Promise.allSettled([window.api.goals.list(), window.api.notes.loadAll(), window.api.collections.list()])
+      .then(([goalResult, noteResult, topicResult]) => {
         if (!active) return
-        if (result.ok) {
-          setGoals(result.value)
-          setSelectedId((current) => result.value.some((g) => g.id === current)
-            ? current : result.value[0]?.id ?? null)
-        } else setError(result.error.message)
-        setNotes(allNotes)
-        if (topics.ok) setCollections(topics.value)
-      })
-      .catch((reason) => { if (active) setError(String(reason)) })
-      .finally(() => { if (active) setLoading(false) })
+        const problems: string[] = []
+        if (goalResult.status === 'fulfilled') {
+          if (goalResult.value.ok) {
+            const availableGoals = goalResult.value.value
+            setGoals(availableGoals)
+            setSelectedId((current) => availableGoals.some((g) => g.id === current)
+              ? current : availableGoals[0]?.id ?? null)
+          } else problems.push(goalResult.value.error.message)
+        } else problems.push(String(goalResult.reason))
+        if (noteResult.status === 'fulfilled') setNotes(noteResult.value)
+        else problems.push(`笔记读取失败：${String(noteResult.reason)}`)
+        if (topicResult.status === 'fulfilled') {
+          if (topicResult.value.ok) setCollections(topicResult.value.value)
+          else problems.push(topicResult.value.error.message)
+        } else problems.push(`知识库读取失败：${String(topicResult.reason)}`)
+        setError(problems.join('；') || null)
+      }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [config.sync_dir])
 

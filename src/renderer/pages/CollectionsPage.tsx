@@ -30,16 +30,20 @@ export default function CollectionsPage(): JSX.Element {
     setItems([])
     setSelectedId(null)
     if (!config.sync_dir) { setLoading(false); return () => { active = false } }
-    void Promise.all([window.api.collections.list(), window.api.notes.loadAll()])
-      .then(([result, allNotes]) => {
+    void Promise.allSettled([window.api.collections.list(), window.api.notes.loadAll()])
+      .then(([topicResult, noteResult]) => {
         if (!active) return
-        if (result.ok) {
-          setItems(result.value)
-          setSelectedId(result.value[0]?.id ?? null)
-        } else setError(result.error.message)
-        setNotes(allNotes)
-      }).catch((reason) => { if (active) setError(String(reason)) })
-      .finally(() => { if (active) setLoading(false) })
+        const problems: string[] = []
+        if (topicResult.status === 'fulfilled') {
+          if (topicResult.value.ok) {
+            setItems(topicResult.value.value)
+            setSelectedId(topicResult.value.value[0]?.id ?? null)
+          } else problems.push(topicResult.value.error.message)
+        } else problems.push(String(topicResult.reason))
+        if (noteResult.status === 'fulfilled') setNotes(noteResult.value)
+        else problems.push(`笔记读取失败：${String(noteResult.reason)}`)
+        setError(problems.join('；') || null)
+      }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [config.sync_dir])
 

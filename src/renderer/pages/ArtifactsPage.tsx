@@ -56,15 +56,24 @@ export default function ArtifactsPage(): JSX.Element {
     setLoading(true)
     setSelectedId(null)
     if (!config.sync_dir) { setLoading(false); return () => { active = false } }
-    void Promise.all([window.api.artifacts.list(), window.api.goals.list(), window.api.notes.loadAll()])
-      .then(([artifacts, goalResult, allNotes]) => {
+    void Promise.allSettled([window.api.artifacts.list(), window.api.goals.list(), window.api.notes.loadAll()])
+      .then(([artifactResult, goalResult, noteResult]) => {
         if (!active) return
-        if (artifacts.ok) { setItems(artifacts.value); setSelectedId(artifacts.value[0]?.id ?? null) }
-        else setError(artifacts.error.message)
-        if (goalResult.ok) setGoals(goalResult.value)
-        setNotes(allNotes)
-      }).catch((reason) => { if (active) setError(String(reason)) })
-      .finally(() => { if (active) setLoading(false) })
+        const problems: string[] = []
+        if (artifactResult.status === 'fulfilled') {
+          if (artifactResult.value.ok) {
+            setItems(artifactResult.value.value)
+            setSelectedId(artifactResult.value.value[0]?.id ?? null)
+          } else problems.push(artifactResult.value.error.message)
+        } else problems.push(String(artifactResult.reason))
+        if (goalResult.status === 'fulfilled') {
+          if (goalResult.value.ok) setGoals(goalResult.value.value)
+          else problems.push(goalResult.value.error.message)
+        } else problems.push(`目标读取失败：${String(goalResult.reason)}`)
+        if (noteResult.status === 'fulfilled') setNotes(noteResult.value)
+        else problems.push(`笔记读取失败：${String(noteResult.reason)}`)
+        setError(problems.join('；') || null)
+      }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [config.sync_dir])
   const selected = items.find((item) => item.id === selectedId) ?? null
