@@ -61,8 +61,9 @@ async function callDeepseek(
       throw new Error(`DeepSeek HTTP ${resp.status}: ${errText.slice(0, 200)}`)
     }
 
-    const data = await resp.json()
-    const result = data.choices[0].message.content
+    const data = await resp.json() as { choices?: { message?: { content?: unknown } }[] }
+    const result = data.choices?.[0]?.message?.content
+    if (typeof result !== 'string') throw new Error('DeepSeek returned no text')
     log.info(`DeepSeek response: status=${resp.status}, duration=${duration}ms, responseLength=${result.length}`)
     return result
   } finally {
@@ -106,8 +107,9 @@ async function callGemini(
       throw new Error(`Gemini HTTP ${resp.status}: ${errText.slice(0, 200)}`)
     }
 
-    const data = await resp.json()
-    const result = data.candidates[0].content.parts[0].text
+    const data = await resp.json() as { candidates?: { content?: { parts?: { text?: unknown }[] } }[] }
+    const result = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (typeof result !== 'string') throw new Error('Gemini returned no text')
     log.info(`Gemini response: status=${resp.status}, duration=${duration}ms, responseLength=${result.length}`)
     return result
   } finally {

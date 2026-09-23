@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test:run": "vitest run",
     "preview": "electron-vite preview",
     "package:win": "electron-vite build && npm prune --omit=dev && npm i --save-dev --no-audit --no-fund electron@30.5.1 electron-builder@26.8.1 && npx electron-builder --win && npm install",
     "package:mac": "electron-vite build && npm prune --omit=dev && npm i --save-dev --no-audit --no-fund electron@30.5.1 electron-builder@26.8.1 && npx electron-builder --mac && npm install",
@@ -42,7 +44,8 @@
     "electron": "^30.5.1",
     "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "2.1.9"
   },
   "allowScripts": {
     "electron@30.5.1": true,

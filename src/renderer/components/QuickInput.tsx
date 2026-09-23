@@ -5,10 +5,12 @@ import { useConfig } from '../context/ConfigContext'
 import '../styles/quickinput.css'
 
 // 轻量语音输入：浏览器原生 Web Speech API（非神经网络）
-function getSpeechRecognition(): SpeechRecognitionConfig | null {
+type SpeechRecognitionCtor = new () => SpeechRecognitionConfig
+
+function getSpeechRecognition(): SpeechRecognitionCtor | null {
   const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionConfig
-    webkitSpeechRecognition?: SpeechRecognitionConfig
+    SpeechRecognition?: SpeechRecognitionCtor
+    webkitSpeechRecognition?: SpeechRecognitionCtor
   }
   return w.SpeechRecognition || w.webkitSpeechRecognition || null
 }

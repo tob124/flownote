@@ -87,42 +87,52 @@ function createWindow(): BrowserWindow {
   return win
 }
 
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.flownote.app')
-
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
-
-  const config = loadConfig()
-
-  registerFileProtocol()
-  registerAllIpc()
-
-  if (config.sync_dir) {
-    ensureDirectories(config.sync_dir)
-  }
-
-  mainWindow = createWindow()
-  setNotificationWindow(mainWindow)
-
-  classifierService = new ClassifierService()
-  setClassifierInstance(classifierService)
-  classifierService.start(mainWindow)
-
-  inboxWatcher.init()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = createWindow()
-      classifierService?.start(mainWindow)
-    }
-  })
-})
-
-app.on('window-all-closed', () => {
-  classifierService?.stop()
-  setClassifierInstance(null)
-  inboxWatcher.stop()
+if (!app.requestSingleInstanceLock()) {
   app.quit()
-})
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  })
+
+  app.whenReady().then(() => {
+    electronApp.setAppUserModelId('com.flownote.app')
+
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
+
+    const config = loadConfig()
+
+    registerFileProtocol()
+    registerAllIpc()
+
+    if (config.sync_dir) {
+      ensureDirectories(config.sync_dir)
+    }
+
+    mainWindow = createWindow()
+    setNotificationWindow(mainWindow)
+
+    classifierService = new ClassifierService()
+    setClassifierInstance(classifierService)
+    classifierService.start(mainWindow)
+
+    inboxWatcher.init()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        mainWindow = createWindow()
+        classifierService?.start(mainWindow)
+      }
+    })
+  })
+
+  app.on('window-all-closed', () => {
+    classifierService?.stop()
+    setClassifierInstance(null)
+    inboxWatcher.stop()
+    app.quit()
+  })
+}

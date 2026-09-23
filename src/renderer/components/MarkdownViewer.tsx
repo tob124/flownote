@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import ReactMarkdown from 'react-markdown'
+import { isValidElement, useLayoutEffect, useRef, type ReactNode } from 'react'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { normalizeLine, slugify, type Heading } from '../utils/markdown'
 import '../styles/markdown.css'
@@ -16,8 +16,8 @@ function extractText(node: ReactNode): string {
   if (node == null) return ''
   if (typeof node === 'string' || typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(extractText).join('')
-  if (typeof node === 'object' && 'props' in (node as Record<string, unknown>)) {
-    return extractText((node as { props: { children?: ReactNode } }).props.children)
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return extractText(node.props.children)
   }
   return ''
 }
@@ -80,20 +80,25 @@ export default function MarkdownViewer({
 
   // 标题（h1-h6）用默认渲染，id 由上方 useLayoutEffect 直接写到 DOM；
   // 这里只重写段落与引用以支持 diff 高亮。
-  const components = {
-    p: (props: Record<string, unknown>) => {
-      const text = extractText(props.children)
-      return <p className={isNew(text) ? 'diff-highlight' : undefined} {...(props as object)} />
-    },
-    blockquote: (props: Record<string, unknown>) => {
-      const text = extractText(props.children)
-      return (
-        <blockquote
-          className={isNew(text) ? 'diff-highlight' : undefined}
-          {...(props as object)}
-        />
-      )
-    }
+  const components: Components = {
+    p: ({ node: _node, children, className, ...props }) => (
+      <p
+        {...props}
+        className={[className, isNew(extractText(children)) && 'diff-highlight']
+          .filter(Boolean).join(' ') || undefined}
+      >
+        {children}
+      </p>
+    ),
+    blockquote: ({ node: _node, children, className, ...props }) => (
+      <blockquote
+        {...props}
+        className={[className, isNew(extractText(children)) && 'diff-highlight']
+          .filter(Boolean).join(' ') || undefined}
+      >
+        {children}
+      </blockquote>
+    )
   }
 
   return (

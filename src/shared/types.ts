@@ -9,6 +9,9 @@ export interface Note {
   id: string
   raw_content: string
   created_at: string
+  created_at_ms?: number
+  /** Stable import-block identity, retained after a receipt is written. */
+  capture_id?: string
   ai_status: 'pending' | 'processing' | 'done' | 'failed'
   retry_count: number
   title: string

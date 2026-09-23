@@ -68,7 +68,7 @@ export default function StatsPage(): JSX.Element {
       prev = d
     }
 
-    const last7 = Array.from({ length: 7 }).reduce((acc, _, i) => {
+    const last7 = Array.from({ length: 7 }).reduce<number>((acc, _, i) => {
       return acc + (countByDate.get(addDays(todayKey, -i)) ?? 0)
     }, 0)
 

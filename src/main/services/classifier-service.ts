@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { loadAllNotes, updateNote } from '../store/note-store'
+import { applyAiPatch, getSyncDir, hashNoteInput, loadAllNotesFrom, loadNote } from '../store/note-store'
 import { loadConfig } from '../store/config-store'
 import { callLlm } from '../llm/llm-client'
 import { CLASSIFY_PROMPT } from '../llm/prompts'
@@ -57,18 +57,18 @@ export class ClassifierService {
   private async processQueue(): Promise<void> {
     try {
       const config = loadConfig()
-      if (!config.sync_dir || !config.api_key) return
+      const syncDir = config.sync_dir
+      if (!syncDir || !config.api_key) return
 
-      // 恢复卡在 processing 的笔记（上次运行意外中断/处理中途被打断），防止永久停留“处理中”
-      // 此处不会与并发处理的 batch 冲突：processQueue 是串行 await 的，本轮开始时上一轮已结束，
-      // 因此任何仍是 processing 的笔记都确认为残留状态，安全地回退到 pending 重新排队。
-      const allNotes = loadAllNotes()
+      const allNotes = loadAllNotesFrom(syncDir)
       let recovered = 0
-      for (const n of allNotes) {
-        if (n.ai_status === 'processing') {
-          n.ai_status = 'pending'
-          n.retry_count = 0
-          updateNote(n)
+      for (const note of allNotes) {
+        if (note.ai_status !== 'processing') continue
+        const state = applyAiPatch(syncDir, note.id, hashNoteInput(note.raw_content), {
+          ai_status: 'pending'
+        })
+        if (state === 'applied') {
+          note.ai_status = 'pending'
           recovered++
         }
       }
@@ -77,16 +77,12 @@ export class ClassifierService {
         this.notifyUpdate()
       }
 
-      // 按“先旧后新”顺序处理：旧笔记往往记的是“因”，新笔记可能记的是“果”，
-      // 只有先整合旧笔记，wiki 才能完整承接因果逻辑。loadAllNotes 默认降序（新在前），
-      // 因此在筛选待处理笔记时单独升序，仅影响处理顺序，不影响前端展示的降序。
       const pending = allNotes
-        .filter((n) => n.ai_status === 'pending')
+        .filter((note) => note.ai_status === 'pending')
         .sort((a, b) => a.id.localeCompare(b.id))
         .slice(0, 3)
 
       if (pending.length === 0) {
-        // Check if we were poked during idle time; if so, re-scan immediately
         if (this._poke) {
           this._poke = false
           this.timerId = setTimeout(() => {
@@ -95,13 +91,14 @@ export class ClassifierService {
         }
         return
       }
-
       this._poke = false
 
-      // Mark as processing
+      const inputs = new Map<string, string>()
       for (const note of pending) {
-        note.ai_status = 'processing'
-        updateNote(note)
+        const inputHash = hashNoteInput(note.raw_content)
+        if (applyAiPatch(syncDir, note.id, inputHash, { ai_status: 'processing' }) === 'applied') {
+          inputs.set(note.id, inputHash)
+        }
       }
       this.notifyUpdate()
 
@@ -111,6 +108,8 @@ export class ClassifierService {
       )
 
       for (const note of pending) {
+        const inputHash = inputs.get(note.id)
+        if (!inputHash) continue
         try {
           const result = await callLlm(
             config.api_provider,
@@ -119,103 +118,92 @@ export class ClassifierService {
             note.raw_content,
             { isJson: true }
           )
-
           if (!result) {
-            this.failNote(note)
-            updateNote(note)
-            this.notifyUpdate()
+            this.failNote(syncDir, note, inputHash)
             continue
           }
-
           const parsed = safeParseJson(result)
           if (!parsed || !parsed.title) {
-            this.failNote(note)
-            updateNote(note)
-            this.notifyUpdate()
+            this.failNote(syncDir, note, inputHash)
             continue
           }
 
-          note.title = String(parsed.title || '').trim()
-          note.category = this.validCategory(
-            String(parsed.category || ''),
-            config.categories
-          )
-          note.summary = String(parsed.summary || '').trim()
-          note.tags = Array.isArray(parsed.tags)
-            ? parsed.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
-            : []
-          note.ai_status = 'done'
-          note.retry_count = 0
-
-          updateNote(note)
+          const applied = applyAiPatch(syncDir, note.id, inputHash, {
+            title: String(parsed.title || '').trim(),
+            category: this.validCategory(String(parsed.category || ''), config.categories),
+            summary: String(parsed.summary || '').trim(),
+            tags: Array.isArray(parsed.tags)
+              ? parsed.tags.map((tag: unknown) => String(tag).trim()).filter(Boolean)
+              : [],
+            ai_status: 'done',
+            retry_count: 0
+          })
           this.notifyUpdate()
+          if (applied !== 'applied') continue
 
-          // Generate wiki for classified non-Inbox notes
-          if (note.category !== 'Inbox') {
+          const latest = loadNote(note.id, syncDir)
+          if (latest && latest.category !== 'Inbox' && getSyncDir() === syncDir) {
             this.notifyWikiUpdating()
             try {
-              await generateWiki(note, config.api_provider, config.api_key)
-            } catch (ge) {
-              log.error(`Wiki generation failed for note ${note.id}: ${ge}`)
+              await generateWiki(latest, config.api_provider, config.api_key)
+            } catch (error) {
+              log.error(`Wiki generation failed for note ${note.id}: ${error}`)
               pushNotification({
                 type: 'Wiki 生成',
-                message: `「${note.category}」Wiki 更新失败：${String(ge).slice(0, 80)}`
+                message: `「${latest.category}」Wiki 更新失败：${String(error).slice(0, 80)}`
               })
             }
             this.notifyWikiUpdate()
           }
-        } catch (e) {
-          log.error(`Classifier error on note ${note.id}: ${e}`)
-          this.failNote(note)
-          updateNote(note)
-          this.notifyUpdate()
+        } catch (error) {
+          log.error(`Classifier error on note ${note.id}: ${error}`)
+          this.failNote(syncDir, note, inputHash)
         }
       }
 
-      // 一批笔记处理完成后，检查是否满足自动 dream 触发阈值
-      if (this.win) {
+      if (this.win && getSyncDir() === syncDir) {
         try {
           await maybeAutoDream(this.win)
-        } catch (e) {
-          log.error(`Auto-dream trigger failed: ${e}`)
+        } catch (error) {
+          log.error(`Auto-dream trigger failed: ${error}`)
         }
       }
-    } catch (e) {
-      log.error(`Classifier cycle error: ${e}`)
+    } catch (error) {
+      log.error(`Classifier cycle error: ${error}`)
     }
   }
 
-  private failNote(note: Note): void {
-    note.retry_count++
-    if (note.retry_count >= 3) {
-      note.ai_status = 'failed'
+  private failNote(syncDir: string, note: Note, inputHash: string): void {
+    const latest = loadNote(note.id, syncDir)
+    if (!latest) return
+    const attempts = latest.retry_count + 1
+    const applied = applyAiPatch(syncDir, note.id, inputHash, {
+      retry_count: attempts,
+      ai_status: attempts >= 3 ? 'failed' : 'pending'
+    })
+    if (applied !== 'applied') return
+    this.notifyUpdate()
+    if (attempts >= 3) {
       pushNotification({
         type: 'AI 预处理',
-        message: `笔记「${note.title || note.raw_content.slice(0, 12)}…」重试 3 次后仍失败，请检查 API 配置`
+        message: `笔记「${latest.title || latest.raw_content.slice(0, 12)}…」重试 3 次后仍失败，请检查 API 配置`
       })
     }
   }
 
   private validCategory(category: string, validList: string[]): string {
-    if (validList.includes(category)) return category
-    return 'Inbox'
+    return validList.includes(category) ? category : 'Inbox'
   }
 
   private notifyUpdate(): void {
-    if (this.win) {
-      this.win.webContents.send(IPC_CHANNELS.NOTES_UPDATED)
-    }
+    this.win?.webContents.send(IPC_CHANNELS.NOTES_UPDATED)
   }
 
   private notifyWikiUpdating(): void {
-    if (this.win) {
-      this.win.webContents.send(IPC_CHANNELS.WIKIS_UPDATING)
-    }
+    this.win?.webContents.send(IPC_CHANNELS.WIKIS_UPDATING)
   }
 
   private notifyWikiUpdate(): void {
-    if (this.win) {
-      this.win.webContents.send(IPC_CHANNELS.WIKIS_UPDATED)
-    }
+    this.win?.webContents.send(IPC_CHANNELS.WIKIS_UPDATED)
   }
 }

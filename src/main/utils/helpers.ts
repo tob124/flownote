@@ -20,12 +20,12 @@ export function safeParseJson(text: string): Record<string, unknown> | null {
   return null
 }
 
-export function retryOnFailure<T extends (...args: unknown[]) => unknown>(
-  fn: T,
+export function retryOnFailure<TArgs extends unknown[], TResult>(
+  fn: (...args: TArgs) => Promise<TResult>,
   maxRetries = 3,
   baseDelay = 2.0
-): T {
-  return (async (...args: unknown[]) => {
+): (...args: TArgs) => Promise<TResult> {
+  return async (...args: TArgs): Promise<TResult> => {
     let lastErr: Error | null = null
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -42,5 +42,5 @@ export function retryOnFailure<T extends (...args: unknown[]) => unknown>(
       }
     }
     throw lastErr
-  }) as T
+  }
 }

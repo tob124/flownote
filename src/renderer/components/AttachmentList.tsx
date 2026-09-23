@@ -7,7 +7,7 @@ const MAX_PREVIEW = 10
 
 interface Props {
   note: Note
-  onRefresh: () => void
+  onRefresh?: () => void
   onNotify: (message: string) => void
 }
 
@@ -80,7 +80,7 @@ export default function AttachmentList({ note, onRefresh, onNotify }: Props): JS
       ...note,
       attachments: (note.attachments || []).filter((a) => a.storedName !== storedName)
     }
-    void window.api.notes.update(updated).then(() => onRefresh())
+    void window.api.notes.update(updated).then(() => onRefresh?.())
   }
 
   async function replaceMissing(storedName: string): Promise<void> {
@@ -94,7 +94,7 @@ export default function AttachmentList({ note, onRefresh, onNotify }: Props): JS
       ]
     }
     void window.api.notes.update(updated).then(() => {
-      onRefresh()
+      onRefresh?.()
       onNotify('附件已补齐')
     })
   }

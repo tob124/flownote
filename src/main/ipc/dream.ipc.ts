@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import {
   loadDreamState,
   setDreamThreshold,
@@ -25,7 +25,7 @@ export function registerDreamIpc(): void {
     const config = loadConfig()
     const syncDir = config.sync_dir
     if (!syncDir) throw new Error('sync_dir not configured')
-    const win = event.sender.getOwnerBrowserWindow()
+    const win = BrowserWindow.fromWebContents(event.sender)
     if (win) {
       startDream(syncDir, config.api_provider, config.api_key, win)
     }
