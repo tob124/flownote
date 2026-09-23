@@ -1,7 +1,7 @@
-import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs'
+import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, renameSync } from 'fs'
 import { createHash } from 'crypto'
 import { join } from 'path'
-import type { Note } from '../../shared/types'
+import type { Note, NotePatch } from '../../shared/types'
 import { loadConfig } from './config-store'
 import { atomicWrite } from './atomic-file'
 
@@ -33,10 +33,13 @@ export function allocateNoteId(notesDir: string): string {
   let last = lastAllocatedByDir.get(notesDir)
   if (last === undefined) {
     last = 0
-    for (const name of readdirSync(notesDir)) {
-      if (!/^\d{13,}\.json$/.test(name)) continue
-      const id = Number(name.slice(0, -5))
-      if (Number.isSafeInteger(id)) last = Math.max(last, id)
+    for (const dir of [notesDir, join(notesDir, '..', 'trash', 'notes'), join(notesDir, '..', 'trash', 'deleted')]) {
+      if (!existsSync(dir)) continue
+      for (const name of readdirSync(dir)) {
+        if (!/^\d{13,}\.json$/.test(name)) continue
+        const id = Number(name.slice(0, -5))
+        if (Number.isSafeInteger(id)) last = Math.max(last, id)
+      }
     }
   }
   let candidate = Math.max(Date.now(), last + 1)
@@ -68,6 +71,8 @@ export function saveNote(
       raw_content: content,
       created_at: new Date(createdAtMs).toISOString().slice(0, 10),
       created_at_ms: createdAtMs,
+      updated_at_ms: createdAtMs,
+      revision: 1,
       ...(captureId ? { capture_id: captureId } : {}),
       ai_status: aiStatus,
       retry_count: 0,
@@ -101,6 +106,7 @@ export function loadAllNotesFrom(syncDir: string): Note[] {
   try {
     for (const file of readdirSync(notesDir)) {
       if (!/^\d{13,}\.json$/.test(file)) continue
+      if (existsSync(join(syncDir, 'trash', 'deleted', file))) continue
       try {
         const raw = readFileSync(join(notesDir, file), 'utf-8')
         notes.push(JSON.parse(raw))
@@ -108,25 +114,80 @@ export function loadAllNotesFrom(syncDir: string): Note[] {
         // A partially synced or damaged file must not hide other notes.
       }
     }
-  } catch {
-    return []
+  } catch (error) {
+    throw new Error(`无法读取笔记目录：${String(error)}`)
   }
   notes.sort((a, b) => b.id.localeCompare(a.id))
   return notes
 }
 
+export class NoteConflictError extends Error {}
+
 export function updateNote(note: Note): void {
   const syncDir = getSyncDir()
   if (!syncDir) throw new Error('sync_dir not configured')
-  if (!NOTE_ID.test(note.id)) throw new Error('Invalid Note ID')
+  const current = loadNote(note.id, syncDir)
+  if (!current) throw new Error(`Note ${note.id} no longer exists`)
+  if ((note.revision ?? 0) !== (current.revision ?? 0)) {
+    throw new NoteConflictError('笔记已被其他操作更新，请重新读取后保存')
+  }
   const filePath = join(syncDir, 'notes', `${note.id}.json`)
-  if (!existsSync(filePath)) throw new Error(`Note ${note.id} no longer exists`)
-  atomicWrite(filePath, JSON.stringify(note, null, 2))
+  atomicWrite(filePath, JSON.stringify({
+    ...note, revision: (current.revision ?? 0) + 1, updated_at_ms: Date.now()
+  }, null, 2))
+}
+
+/** Revision-checked user edits never replace fields omitted from the patch. */
+export function patchNote(
+  syncDir: string, id: string, expectedRevision: number, patch: NotePatch
+): Note {
+  if (!NOTE_ID.test(id) || !patch || typeof patch !== 'object') throw new Error('Invalid note patch')
+  const current = loadNote(id, syncDir)
+  if (!current) throw new Error(`Note ${id} no longer exists`)
+  if (!Number.isSafeInteger(expectedRevision) || (current.revision ?? 0) !== expectedRevision) {
+    throw new NoteConflictError('笔记已有更新，请刷新后再保存；草稿会保留')
+  }
+  const next: Note = { ...current }
+  const manual = new Set(current.manual_fields ?? [])
+  if (patch.raw_content !== undefined) {
+    if (typeof patch.raw_content !== 'string' || patch.raw_content.length > 1_000_000) throw new Error('笔记正文无效或过长')
+    if (patch.raw_content !== current.raw_content) {
+      next.raw_content = patch.raw_content
+      next.ai_status = 'pending'
+      next.retry_count = 0
+    }
+  }
+  for (const field of ['title', 'summary', 'category'] as const) {
+    if (patch[field] === undefined) continue
+    if (typeof patch[field] !== 'string' || patch[field]!.length > 2000) throw new Error(`${field} 无效或过长`)
+    next[field] = patch[field]!.trim()
+    manual.add(field)
+  }
+  if (patch.tags !== undefined) {
+    if (!Array.isArray(patch.tags) || patch.tags.length > 50 || patch.tags.some((tag) => typeof tag !== 'string' || tag.length > 100)) {
+      throw new Error('标签无效或过多')
+    }
+    next.tags = [...new Set(patch.tags.map((tag) => tag.trim()).filter(Boolean))]
+    manual.add('tags')
+  }
+  if (patch.attachments !== undefined) {
+    if (!Array.isArray(patch.attachments) || patch.attachments.some((file) =>
+      !file || typeof file.storedName !== 'string' || /[\\/]/.test(file.storedName) || file.storedName.includes('..'))) {
+      throw new Error('附件列表无效')
+    }
+    next.attachments = patch.attachments
+  }
+  next.manual_fields = [...manual]
+  next.revision = expectedRevision + 1
+  next.updated_at_ms = Date.now()
+  atomicWrite(join(syncDir, 'notes', `${id}.json`), JSON.stringify(next, null, 2))
+  return next
 }
 
 export function loadNote(id: string, syncDir = getSyncDir()): Note | null {
   if (!syncDir || !NOTE_ID.test(id)) return null
   const filePath = join(syncDir, 'notes', `${id}.json`)
+  if (existsSync(join(syncDir, 'trash', 'deleted', `${id}.json`))) return null
   try {
     return JSON.parse(readFileSync(filePath, 'utf-8'))
   } catch {
@@ -148,34 +209,82 @@ export function applyAiPatch(
   const filePath = join(syncDir, 'notes', `${id}.json`)
   if (hashNoteInput(current.raw_content) !== expectedInputHash) {
     if (current.ai_status === 'processing') {
-      atomicWrite(filePath, JSON.stringify({ ...current, ai_status: 'pending', retry_count: 0 }, null, 2))
+      atomicWrite(filePath, JSON.stringify({
+        ...current, ai_status: 'pending', retry_count: 0,
+        revision: (current.revision ?? 0) + 1, updated_at_ms: Date.now()
+      }, null, 2))
     }
     return 'stale'
   }
   if (!existsSync(filePath)) return 'missing'
-  atomicWrite(filePath, JSON.stringify({ ...current, ...patch }, null, 2))
+  const allowedPatch = { ...patch }
+  for (const field of current.manual_fields ?? []) delete allowedPatch[field]
+  atomicWrite(filePath, JSON.stringify({
+    ...current, ...allowedPatch,
+    revision: (current.revision ?? 0) + 1, updated_at_ms: Date.now()
+  }, null, 2))
   return 'applied'
 }
 
-export function searchNotes(keyword: string): Note[] {
-  const notes = loadAllNotes()
+export function searchNotes(keyword: string, syncDir = getSyncDir()): Note[] {
+  if (!syncDir) throw new Error('sync_dir not configured')
+  const notes = loadAllNotesFrom(syncDir)
   if (!keyword.trim()) return notes
   const kw = keyword.toLowerCase()
-  return notes.filter(
-    (n) =>
-      (n.title && n.title.toLowerCase().includes(kw)) ||
-      (n.raw_content && n.raw_content.toLowerCase().includes(kw))
-  )
+  return notes.filter((note) => [
+    note.title, note.raw_content, note.summary, note.category, ...(note.tags || [])
+  ].some((field) => typeof field === 'string' && field.toLowerCase().includes(kw)))
 }
 
-export function deleteNote(id: string): boolean {
-  const syncDir = getSyncDir()
+function trashDir(syncDir: string): string {
+  const dir = join(syncDir, 'trash', 'notes')
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+/** The existing delete action moves a Note to a recoverable trash folder. */
+export function deleteNote(id: string, syncDir = getSyncDir()): boolean {
   if (!syncDir || !NOTE_ID.test(id)) return false
-  const filePath = join(syncDir, 'notes', `${id}.json`)
-  try {
-    unlinkSync(filePath)
-    return true
-  } catch {
-    return false
+  const source = join(syncDir, 'notes', `${id}.json`)
+  const target = join(trashDir(syncDir), `${id}.json`)
+  if (!existsSync(source) || existsSync(target) ||
+      existsSync(join(syncDir, 'trash', 'deleted', `${id}.json`))) return false
+  renameSync(source, target)
+  return true
+}
+
+export function listTrashedNotes(syncDir: string): Note[] {
+  const dir = trashDir(syncDir)
+  const notes: Note[] = []
+  for (const name of readdirSync(dir)) {
+    if (!/^\d{13,}\.json$/.test(name)) continue
+    try {
+      const note = JSON.parse(readFileSync(join(dir, name), 'utf-8')) as Note
+      if (note.id === name.slice(0, -5)) notes.push(note)
+    } catch { /* A damaged sync file must not hide other recoverable notes. */ }
   }
+  return notes.sort((a, b) => b.id.localeCompare(a.id))
+}
+
+export function restoreNote(syncDir: string, id: string): boolean {
+  if (!NOTE_ID.test(id)) return false
+  const source = join(trashDir(syncDir), `${id}.json`)
+  const targetDir = join(syncDir, 'notes')
+  mkdirSync(targetDir, { recursive: true })
+  const target = join(targetDir, `${id}.json`)
+  if (!existsSync(source) || existsSync(target) ||
+      existsSync(join(syncDir, 'trash', 'deleted', `${id}.json`))) return false
+  renameSync(source, target)
+  return true
+}
+
+export function deleteNoteForever(syncDir: string, id: string): boolean {
+  if (!NOTE_ID.test(id)) return false
+  const source = join(trashDir(syncDir), `${id}.json`)
+  if (!existsSync(source)) return false
+  const tombstoneDir = join(syncDir, 'trash', 'deleted')
+  mkdirSync(tombstoneDir, { recursive: true })
+  atomicWrite(join(tombstoneDir, `${id}.json`), JSON.stringify({ id, deleted_at_ms: Date.now() }))
+  unlinkSync(source)
+  return true
 }

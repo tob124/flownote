@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { atomicWrite } from '../src/main/store/atomic-file'
-import { applyAiPatch, hashNoteInput, loadAllNotesFrom, loadNote, saveNote } from '../src/main/store/note-store'
+import { applyAiPatch, deleteNote, deleteNoteForever, hashNoteInput, listTrashedNotes, loadAllNotesFrom, loadNote, patchNote, restoreNote, saveNote, searchNotes } from '../src/main/store/note-store'
 import { readEffectiveTime } from '../src/main/store/note-time'
 import type { Note } from '../src/shared/types'
 
@@ -70,6 +70,54 @@ describe('note storage', () => {
     expect(saved.ai_status).toBe('pending')
     expect(applyAiPatch(dir, id, hashNoteInput('after'), { title: 'new title', ai_status: 'done' })).toBe('applied')
     expect(loadNote(id, dir)?.attachments).toEqual(edited.attachments)
+  })
+
+  it('rejects stale user edits and keeps manually chosen fields when AI completes', () => {
+    const dir = library()
+    const id = saveNote(dir, 'first draft')
+    const edited = patchNote(dir, id, 1, {
+      raw_content: 'revised draft', title: 'My title', category: '个人'
+    })
+    expect(edited.revision).toBe(2)
+    expect(edited.ai_status).toBe('pending')
+    expect(() => patchNote(dir, id, 1, { raw_content: 'stale overwrite' })).toThrow()
+    expect(applyAiPatch(dir, id, hashNoteInput('revised draft'), {
+      title: 'AI title', category: '工作', summary: 'AI summary',
+      tags: ['note'], ai_status: 'done', retry_count: 0
+    })).toBe('applied')
+    const saved = loadNote(id, dir)!
+    expect(saved.title).toBe('My title')
+    expect(saved.category).toBe('个人')
+    expect(saved.summary).toBe('AI summary')
+    expect(saved.raw_content).toBe('revised draft')
+    expect(saved.revision).toBe(3)
+  })
+
+  it('searches user-facing fields and restores trashed notes under the same ID', () => {
+    const dir = library()
+    const id = saveNote(dir, 'plain body')
+    patchNote(dir, id, 1, { title: 'Alpha', summary: '重要摘要', category: '阅读', tags: ['重点'] })
+    expect(searchNotes('摘要', dir).map((note) => note.id)).toEqual([id])
+    expect(searchNotes('重点', dir).map((note) => note.id)).toEqual([id])
+    expect(deleteNote(id, dir)).toBe(true)
+    expect(loadAllNotesFrom(dir)).toEqual([])
+    expect(searchNotes('Alpha', dir)).toEqual([])
+    expect(listTrashedNotes(dir).map((note) => note.id)).toEqual([id])
+    expect(restoreNote(dir, id)).toBe(true)
+    expect(loadNote(id, dir)?.title).toBe('Alpha')
+    expect(listTrashedNotes(dir)).toEqual([])
+  })
+
+  it('keeps a permanent-delete receipt and never reuses a trashed ID after restart', () => {
+    const dir = library()
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+    const id = saveNote(dir, 'discard')
+    expect(deleteNote(id, dir)).toBe(true)
+    expect(deleteNoteForever(dir, id)).toBe(true)
+    expect(listTrashedNotes(dir)).toEqual([])
+    expect(JSON.parse(readFileSync(join(dir, 'trash', 'deleted', `${id}.json`), 'utf-8')).id).toBe(id)
+    expect(deleteNoteForever(dir, id)).toBe(false)
+    expect(saveNote(dir, 'new')).not.toBe(id)
   })
 
   it('reads legacy numeric notes and resolves effective time without migration', () => {

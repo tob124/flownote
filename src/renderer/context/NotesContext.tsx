@@ -43,8 +43,10 @@ export function NotesProvider({ children }: { children: ReactNode }): JSX.Elemen
   const [error, setError] = useState<string | null>(null)
   // Debounce timer for high-frequency reloads (e.g. inbox creating many notes).
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const loadSequence = useRef(0)
 
   const loadNotes = useCallback(async () => {
+    const sequence = ++loadSequence.current
     setError(null)
     // Only show full loading on initial load (no notes cached)
     if (notes.length === 0) {
@@ -56,12 +58,14 @@ export function NotesProvider({ children }: { children: ReactNode }): JSX.Elemen
       const result = searchKeyword
         ? await window.api.notes.search(searchKeyword)
         : await window.api.notes.loadAll()
-      setNotes(result)
+      if (loadSequence.current === sequence) setNotes(result)
     } catch (e) {
-      setError(String(e))
+      if (loadSequence.current === sequence) setError(String(e))
     } finally {
-      setIsLoading(false)
-      setIsRefreshing(false)
+      if (loadSequence.current === sequence) {
+        setIsLoading(false)
+        setIsRefreshing(false)
+      }
     }
   }, [searchKeyword, notes.length])
 
@@ -134,13 +138,8 @@ export function NotesProvider({ children }: { children: ReactNode }): JSX.Elemen
     void loadNotes()
   }, [loadNotes])
 
-  const filteredNotes = searchKeyword
-    ? notes.filter(
-        (n) =>
-          n.title.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-          n.raw_content.toLowerCase().includes(searchKeyword.toLowerCase())
-      )
-    : notes
+  // The main-process search already applies all supported fields.
+  const filteredNotes = notes
 
   return (
     <NotesContext.Provider

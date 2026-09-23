@@ -10,6 +10,9 @@ export interface Note {
   raw_content: string
   created_at: string
   created_at_ms?: number
+  updated_at_ms?: number
+  revision?: number
+  manual_fields?: Array<'title' | 'summary' | 'category' | 'tags'>
   /** Stable import-block identity, retained after a receipt is written. */
   capture_id?: string
   ai_status: 'pending' | 'processing' | 'done' | 'failed'
@@ -21,12 +24,24 @@ export interface Note {
   attachments?: NoteFile[]
 }
 
+export interface NotePatch {
+  raw_content?: string
+  title?: string
+  summary?: string
+  category?: string
+  tags?: string[]
+  attachments?: NoteFile[]
+}
+export type NotePatchResult =
+  | { ok: true; value: Note }
+  | { ok: false; error: { code: 'INVALID' | 'NOT_FOUND' | 'CONFLICT' | 'IO'; message: string } }
+
 export interface AppConfig {
   sync_dir: string
   api_provider: 'DeepSeek' | 'Gemini'
   api_key: string
   categories: string[]
-  theme: 'dark' | 'solar' | 'draft'
+  theme: 'paper' | 'dark' | 'solar' | 'draft'
   font_file?: string
   font_family?: string
   /** 界面偏好开关记忆 */
@@ -69,8 +84,31 @@ export const IPC_CHANNELS = {
   NOTES_SEARCH: 'notes:search',
   NOTES_CREATE: 'notes:create',
   NOTES_UPDATE: 'notes:update',
+  NOTES_PATCH: 'notes:patch',
   NOTES_DELETE: 'notes:delete',
+  NOTES_TRASH_LIST: 'notes:trash-list',
+  NOTES_RESTORE: 'notes:restore',
+  NOTES_DELETE_FOREVER: 'notes:delete-forever',
   NOTES_UPDATED: 'notes:updated',
+  ARTIFACTS_LIST: 'artifacts:list',
+  ARTIFACTS_CREATE: 'artifacts:create',
+  ARTIFACTS_RENAME: 'artifacts:rename',
+  ARTIFACTS_SAVE_VERSION: 'artifacts:save-version',
+  ARTIFACTS_EXPORT: 'artifacts:export',
+  COLLECTIONS_LIST: 'collections:list',
+  COLLECTIONS_CREATE: 'collections:create',
+  COLLECTIONS_UPDATE: 'collections:update',
+  COLLECTIONS_LINK_NOTE: 'collections:link-note',
+  COLLECTIONS_DELETE: 'collections:delete',
+  GOALS_LIST: 'goals:list',
+  GOALS_CREATE: 'goals:create',
+  GOALS_UPDATE: 'goals:update',
+  GOALS_ADD_COMMITMENT: 'goals:add-commitment',
+  GOALS_UPDATE_COMMITMENT: 'goals:update-commitment',
+  GOALS_ADD_DECISION: 'goals:add-decision',
+  GOALS_ADD_CHECKIN: 'goals:add-checkin',
+  GOALS_LINK_NOTE: 'goals:link-note',
+  GOALS_LINK_COLLECTION: 'goals:link-collection',
   WIKIS_LIST: 'wikis:list',
   WIKIS_LOAD: 'wikis:load',
   WIKIS_SEAL: 'wikis:seal',

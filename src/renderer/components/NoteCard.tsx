@@ -63,15 +63,15 @@ export default memo(function NoteCard({
         <button className="note-card-attach-btn" onClick={() => void onAttach()} title="附加文件">
           +
         </button>
-        {note.ai_status !== 'processing' && (
+        {
           <button
             className="note-card-delete-btn"
             onClick={() => setShowConfirm(true)}
-            title="删除笔记"
+            title="移至回收站"
           >
             ×
           </button>
-        )}
+        }
       </div>
 
       <div
@@ -84,15 +84,13 @@ export default memo(function NoteCard({
         {note.raw_content}
       </div>
 
-      {grid && (
-        <button
-          className="note-card-detail-btn"
-          onClick={() => onOpenDetail(note)}
-          title="查看全文"
-        >
-          📄 查看全文
-        </button>
-      )}
+      <button
+        className="note-card-detail-btn"
+        onClick={() => onOpenDetail(note)}
+        title="阅读或编辑这条笔记"
+      >
+        阅读 / 编辑
+      </button>
 
       <AttachmentList note={note} onRefresh={onRefresh} onNotify={notify} />
 
@@ -129,7 +127,7 @@ export default memo(function NoteCard({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p style={{ marginBottom: 16 }}>确定要删除这条笔记吗？</p>
+            <p style={{ marginBottom: 16 }}>将这条笔记移至回收站？之后可恢复。</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
                 className="settings-btn"
@@ -144,7 +142,7 @@ export default memo(function NoteCard({
                   setShowConfirm(false)
                 }}
               >
-                删除
+                移至回收站
               </button>
             </div>
           </div>

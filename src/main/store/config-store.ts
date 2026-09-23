@@ -12,7 +12,7 @@ function defaultConfig(): AppConfig {
     api_provider: 'DeepSeek',
     api_key: '',
     categories: [...DEFAULT_CATEGORIES],
-    theme: 'dark',
+    theme: 'paper',
     notes_view: 'list',
     wiki_outline_open: true,
     wiki_minimap_open: true

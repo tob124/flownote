@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron'
 import { loadDreamState, isDreamInProgress } from '../store/dream-store'
 import { registerNotesIpc } from './notes.ipc'
+import { registerGoalsIpc } from './goals.ipc'
+import { registerCollectionsIpc } from './collections.ipc'
+import { registerArtifactsIpc } from './artifacts.ipc'
 import { registerWikisIpc } from './wikis.ipc'
 import { registerDreamIpc } from './dream.ipc'
 import { registerConfigIpc } from './config.ipc'
@@ -14,6 +17,9 @@ import { IPC_CHANNELS } from '../../shared/types'
 
 export function registerAllIpc(): void {
   registerNotesIpc()
+  registerGoalsIpc()
+  registerCollectionsIpc()
+  registerArtifactsIpc()
   registerWikisIpc()
   registerDreamIpc()
   registerConfigIpc()

@@ -1,84 +1,53 @@
-import { useEffect, useRef, useState } from 'react'
-import { useApp } from '../context/AppContext'
+import { useApp, type PageId } from '../context/AppContext'
 import '../styles/sidebar.css'
 
-const ITEMS = [
-  { label: 'All Notes', icon: '📝' },
-  { label: 'Wikis', icon: '📚' },
-  { label: 'Dream', icon: '💭' },
-  { label: 'Stats', icon: '🔥' },
-  { label: 'Settings', icon: '⚙️' }
+const PRIMARY: { id: PageId; label: string; mark: string }[] = [
+  { id: 'notes', label: '记录与笔记', mark: '记' },
+  { id: 'goals', label: '我的目标', mark: '标' },
+  { id: 'artifacts', label: '我的成果', mark: '果' },
+  { id: 'stats', label: '记录概览', mark: '览' }
+]
+const LIBRARY: { id: PageId; label: string; mark: string }[] = [
+  { id: 'collections', label: '主题知识库', mark: '库' },
+  { id: 'wikis', label: 'Wiki', mark: '知' },
+  { id: 'dream', label: 'Dream', mark: '思' }
+]
+const TOOLS: { id: PageId; label: string; mark: string }[] = [
+  { id: 'notifications', label: '通知', mark: '讯' },
+  { id: 'settings', label: '设置', mark: '设' }
 ]
 
 export default function Sidebar(): JSX.Element {
-  const { pageIndex, setPageIndex } = useApp()
-  const wrapRef = useRef<HTMLDivElement | null>(null)
-  // 激活项滑动指示块的位置（相对 .sidebar-nav-wrap）
-  const [indicator, setIndicator] = useState<{ top: number; height: number } | null>(null)
-  // 首次定位完成后再开启过渡动画，避免初次渲染时从顶部滑入
-  const [ready, setReady] = useState(false)
-
-  useEffect(() => {
-    let frame = 0
-    const measure = (): void => {
-      const wrap = wrapRef.current
-      if (!wrap) return
-      const active = wrap.querySelector<HTMLElement>('.sidebar-nav-item.active')
-      if (!active) {
-        setIndicator(null)
-        return
-      }
-      setIndicator({ top: active.offsetTop, height: active.offsetHeight })
-      // 稳定后开启过渡（等浏览器渲染出一次静态布局）
-      requestAnimationFrame(() => setReady(true))
-    }
-    measure()
-    const onResize = (): void => {
-      frame = requestAnimationFrame(measure)
-    }
-    window.addEventListener('resize', onResize)
-    return () => {
-      window.removeEventListener('resize', onResize)
-      cancelAnimationFrame(frame)
-    }
-  }, [pageIndex])
-
+  const { pageId, setPageId } = useApp()
+  const renderItems = (items: typeof PRIMARY): JSX.Element[] => items.map((item) => (
+    <li key={item.id}>
+      <button
+        type="button"
+        className={`sidebar-nav-item${pageId === item.id ? ' active' : ''}`}
+        onClick={() => setPageId(item.id)}
+        title={item.label}
+        aria-current={pageId === item.id ? 'page' : undefined}
+      >
+        <span className="sidebar-nav-mark" aria-hidden="true">{item.mark}</span>
+        <span className="sidebar-nav-label">{item.label}</span>
+      </button>
+    </li>
+  ))
   return (
-    <div className="sidebar">
+    <aside className="sidebar" aria-label="主导航">
       <div className="sidebar-header">
         <div className="sidebar-title">FlowNote</div>
-        <div className="sidebar-subtitle">捕捉灵感，整理思绪</div>
+        <div className="sidebar-subtitle">写下所见，推进所想</div>
       </div>
-      <div className="sidebar-nav-wrap" ref={wrapRef}>
-        <div
-          className={`sidebar-nav-indicator${ready ? ' is-ready' : ''}`}
-          style={indicator ? { top: indicator.top, height: indicator.height } : undefined}
-        />
-        <ul className="sidebar-nav">
-          {ITEMS.map((item, i) => (
-            <li
-              key={i}
-              className={`sidebar-nav-item${pageIndex === i ? ' active' : ''}`}
-              onClick={() => setPageIndex(i as 0 | 1 | 2 | 3 | 4)}
-            >
-              <span className="sidebar-nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="sidebar-divider" />
-        <ul className="sidebar-nav">
-          <li
-            className={`sidebar-nav-item${pageIndex === 5 ? ' active' : ''} sidebar-nav-bottom`}
-            onClick={() => setPageIndex(5)}
-            title="通知中心"
-          >
-            <span className="sidebar-nav-icon">🔔</span>
-            <span>通知</span>
-          </li>
-        </ul>
-      </div>
-      <div className="sidebar-footer">v2.9.0</div>
-    </div>
+      <nav className="sidebar-nav-wrap">
+        <div className="sidebar-group-label">日常</div>
+        <ul className="sidebar-nav">{renderItems(PRIMARY)}</ul>
+        <div className="sidebar-group-label">资料与回顾</div>
+        <ul className="sidebar-nav">{renderItems(LIBRARY)}</ul>
+        <div className="sidebar-nav-spacer" />
+        <ul className="sidebar-nav sidebar-nav-tools">{renderItems(TOOLS)}</ul>
+      </nav>
+      <div className="sidebar-footer">PRIVATE WORKSPACE</div>
+    </aside>
   )
 }

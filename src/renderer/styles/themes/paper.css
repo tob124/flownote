@@ -1,0 +1,38 @@
+[data-theme="paper"] {
+  --bg-primary: #f7f5f0;
+  --bg-secondary: #f0eee8;
+  --bg-card: #fffefc;
+  --bg-input: #fffefc;
+  --bg-sidebar: #f2f0ea;
+  --bg-hover: #eaece7;
+  --bg-scrollbar-track: transparent;
+  --bg-scrollbar-thumb: rgba(31, 41, 40, .17);
+  --bg-scrollbar-thumb-hover: rgba(31, 41, 40, .3);
+  --text-primary: #1f2928;
+  --text-secondary: #56615d;
+  --text-muted: #69736f;
+  --accent: #126f68;
+  --accent-hover: #0e5c56;
+  --accent-text: #ffffff;
+  --danger: #a73632;
+  --danger-hover: #852924;
+  --border: #d4d9d2;
+  --border-light: #e1e4dc;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 1px 4px rgba(31, 41, 40, .05);
+  --font-mono: 'Cascadia Code', Consolas, monospace;
+  --heat-0: #eaeee9;
+  --heat-1: #cee2d9;
+  --heat-2: #a2cfc0;
+  --heat-3: #5da994;
+  --heat-4: #126f68;
+  --md-h1: #1f2928;
+  --md-h2: #2f5550;
+  --md-h3: #126f68;
+  --md-h4: #4a6d61;
+  --md-h5: #56615d;
+  --md-h6: #69736f;
+  --md-code-inline: #9a4d46;
+}

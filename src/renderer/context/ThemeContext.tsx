@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 
-type ThemeName = 'dark' | 'solar' | 'draft'
+type ThemeName = 'paper' | 'dark' | 'solar' | 'draft'
 
 const BASE_SANS = "'Source Sans Pro', 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif"
 
@@ -12,14 +12,14 @@ interface ThemeCtx {
 }
 
 const ThemeContext = createContext<ThemeCtx>({
-  theme: 'dark',
+  theme: 'paper',
   setTheme: () => {},
   applyFont: async () => false,
   clearFont: () => {}
 })
 
 export function ThemeProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [theme, setTheme] = useState<ThemeName>('dark')
+  const [theme, setTheme] = useState<ThemeName>('paper')
   const fontFaceRef = useRef<FontFace | null>(null)
 
   useEffect(() => {

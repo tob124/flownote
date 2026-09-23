@@ -1,0 +1,43 @@
+.artifacts-page { display:flex; flex-direction:column; height:100%; min-width:0; background:var(--bg-primary); }
+.artifacts-topbar { display:flex; justify-content:space-between; align-items:end; gap:20px; padding:28px 34px 24px; border-bottom:1px solid var(--border-light); }
+.artifacts-topbar h1 { margin:4px 0; font:600 28px Georgia,'Noto Serif SC',serif; }
+.artifacts-topbar p { margin:0; font-size:13px; color:var(--text-secondary); }
+.artifacts-primary { padding:10px 16px; border:0; border-radius:7px; background:var(--accent); color:var(--bg-primary); cursor:pointer; white-space:nowrap; }
+.artifacts-primary:disabled { opacity:.45; cursor:not-allowed; }
+.artifacts-error,.artifacts-notice { padding:9px 34px; font-size:13px; }
+.artifacts-error { color:var(--danger); } .artifacts-notice { color:var(--accent); }
+.artifacts-error button,.artifacts-notice button { margin-left:15px; background:transparent; border:0; color:inherit; cursor:pointer; }
+.artifacts-layout { display:grid; grid-template-columns:238px minmax(0,1fr); flex:1; min-height:0; }
+.artifacts-list { overflow-y:auto; padding:21px 13px; background:var(--bg-sidebar); border-right:1px solid var(--border-light); }
+.artifacts-list-label { display:flex; justify-content:space-between; padding:0 10px 12px; color:var(--text-secondary); font-size:12px; font-weight:700; }
+.artifacts-list p { padding:0 10px; color:var(--text-muted); line-height:1.7; font-size:12px; }
+.artifacts-list button { width:100%; display:grid; gap:4px; padding:12px; text-align:left; background:transparent; border:1px solid transparent; border-radius:9px; color:var(--text-primary); cursor:pointer; }
+.artifacts-list button.selected { background:var(--bg-card); border-color:var(--border); box-shadow:var(--shadow-card); }
+.artifacts-list button span { color:var(--text-muted); font-size:11px; }
+.artifacts-main { min-width:0; overflow-y:auto; }
+.artifacts-empty { margin:12vh auto; max-width:440px; text-align:center; padding:25px; color:var(--text-secondary); }
+.artifacts-empty h2 { color:var(--text-primary); font:600 25px Georgia,serif; }
+.artifact-hero { padding:36px 38px 25px; border-bottom:1px solid var(--border-light); }
+.artifact-title-form { display:flex; gap:10px; align-items:center; margin-top:8px; }
+.artifact-title-form input { min-width:0; width:100%; border:0; background:transparent; color:var(--text-primary); font:600 30px Georgia,'Noto Serif SC',serif; }
+.artifact-title-form button,.artifact-context button,.artifact-section-title button,.artifact-version-buttons button,.artifact-version-actions button { padding:7px 11px; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text-primary); cursor:pointer; }
+.artifact-hero p { margin:7px 0 0; color:var(--text-muted); font-size:12px; }
+.artifact-content { display:grid; gap:22px; max-width:1040px; padding:30px 38px 65px; }
+.artifact-content section { border:1px solid var(--border-light); border-radius:12px; background:var(--bg-card); padding:22px 25px; }
+.artifact-content h3 { margin:0 0 12px; font:650 17px Georgia,'Noto Serif SC',serif; }
+.artifact-content p { color:var(--text-muted); font-size:12px; line-height:1.7; }
+.artifact-section-title { display:flex; justify-content:space-between; align-items:baseline; }
+.artifact-section-title div { display:flex; gap:5px; }
+.artifact-section-title button.active,.artifact-version-buttons button.active { border-color:var(--accent); color:var(--accent); }
+.artifact-editor textarea { width:100%; min-height:330px; padding:16px; border:1px solid var(--border); border-radius:7px; resize:vertical; background:var(--bg-input); color:var(--text-primary); font:14px/1.75 inherit; }
+.artifact-preview { min-height:180px; overflow-wrap:anywhere; line-height:1.75; color:var(--text-primary); }
+.artifact-sources>input { width:100%; padding:9px; border:1px solid var(--border); border-radius:6px; background:var(--bg-input); color:var(--text-primary); }
+.artifact-source-list { max-height:270px; overflow-y:auto; margin-top:10px; }
+.artifact-source-list label { display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid var(--border-light); font-size:13px; cursor:pointer; }
+.artifact-source-list small { margin-left:8px; color:var(--accent); }
+.artifact-save { justify-self:start; }
+.artifact-version-buttons,.artifact-version-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.artifact-version-detail { margin-top:18px; padding-top:18px; border-top:1px solid var(--border-light); }
+.artifact-version-actions { margin-bottom:18px; font-size:12px; color:var(--text-muted); }
+.collections-modal select { padding:9px; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border); border-radius:6px; }
+@media(max-width:760px) { .artifacts-layout { grid-template-columns:1fr; overflow-y:auto; } .artifacts-list { max-height:190px; border-right:0; border-bottom:1px solid var(--border-light); } .artifacts-main { overflow:visible; } .artifacts-topbar,.artifact-hero,.artifact-content { padding:20px; } }

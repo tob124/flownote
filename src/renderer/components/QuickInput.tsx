@@ -69,7 +69,7 @@ export default function QuickInput(): JSX.Element {
   }
 
   async function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): Promise<void> {
-    if (e.key === 'Enter' && e.altKey) {
+    if (e.key === 'Enter' && e.altKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       await saveNote()
     }

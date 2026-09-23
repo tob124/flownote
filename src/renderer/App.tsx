@@ -8,6 +8,9 @@ import { DreamProvider } from './context/DreamContext'
 import { NotificationProvider } from './context/NotificationContext'
 import Sidebar from './components/Sidebar'
 import NotesPage from './pages/NotesPage'
+import GoalsPage from './pages/GoalsPage'
+import CollectionsPage from './pages/CollectionsPage'
+import ArtifactsPage from './pages/ArtifactsPage'
 import StatsPage from './pages/StatsPage'
 import WikisPage from './pages/WikisPage'
 import DreamPage from './pages/DreamPage'
@@ -16,9 +19,10 @@ import NotificationsPage from './pages/NotificationsPage'
 import './styles/themes/dark.css'
 import './styles/themes/solar.css'
 import './styles/themes/draft.css'
+import './styles/themes/paper.css'
 
 function AppShell(): JSX.Element {
-  const { pageIndex, setPageIndex } = useApp()
+  const { pageId, setPageId } = useApp()
   const { config, isLoaded } = useConfig()
   const { setTheme, applyFont, clearFont } = useTheme()
 
@@ -41,25 +45,20 @@ function AppShell(): JSX.Element {
   useEffect(() => {
     if (!isLoaded) return
     if (config.sync_dir) return
-    setPageIndex(4)
-  }, [isLoaded, config.sync_dir, setPageIndex])
+    setPageId('settings')
+  }, [isLoaded, config.sync_dir, setPageId])
 
   function renderPage(): JSX.Element {
-    switch (pageIndex) {
-      case 0:
-        return <NotesPage />
-      case 1:
-        return <WikisPage />
-      case 2:
-        return <DreamPage />
-      case 3:
-        return <StatsPage />
-      case 4:
-        return <SettingsPage />
-      case 5:
-        return <NotificationsPage />
-      default:
-        return <NotesPage />
+    switch (pageId) {
+      case 'notes': return <NotesPage />
+      case 'goals': return <GoalsPage />
+      case 'collections': return <CollectionsPage />
+      case 'artifacts': return <ArtifactsPage />
+      case 'wikis': return <WikisPage />
+      case 'dream': return <DreamPage />
+      case 'stats': return <StatsPage />
+      case 'settings': return <SettingsPage />
+      case 'notifications': return <NotificationsPage />
     }
   }
 

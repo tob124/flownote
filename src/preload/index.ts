@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Note, AppConfig, DreamMeta, NotificationItem, NoteFile } from '../shared/types'
+import type { Note, NotePatch, NotePatchResult, AppConfig, DreamMeta, NotificationItem, NoteFile } from '../shared/types'
+import type { ArtifactInput, ArtifactRecord, ArtifactResult } from '../shared/artifacts'
+import type { CollectionInput, CollectionRecord, CollectionResult } from '../shared/collections'
+import type { CheckInInput, CommitmentInput, CommitmentStatus, DecisionInput, GoalInput, GoalPatch, GoalRecord, GoalResult } from '../shared/goals'
 
 const api = {
   notes: {
@@ -7,7 +10,44 @@ const api = {
     search: (keyword: string): Promise<Note[]> => ipcRenderer.invoke('notes:search', keyword),
     create: (content: string): Promise<string> => ipcRenderer.invoke('notes:create', content),
     update: (note: Note): Promise<void> => ipcRenderer.invoke('notes:update', note),
-    delete: (id: string): Promise<boolean> => ipcRenderer.invoke('notes:delete', id)
+    patch: (id: string, revision: number, patch: NotePatch): Promise<NotePatchResult> =>
+      ipcRenderer.invoke('notes:patch', id, revision, patch),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke('notes:delete', id),
+    trashList: (): Promise<Note[]> => ipcRenderer.invoke('notes:trash-list'),
+    restore: (id: string): Promise<boolean> => ipcRenderer.invoke('notes:restore', id),
+    deleteForever: (id: string): Promise<boolean> => ipcRenderer.invoke('notes:delete-forever', id)
+  },
+  artifacts: {
+    list: (): Promise<ArtifactResult<ArtifactRecord[]>> => ipcRenderer.invoke('artifacts:list'),
+    create: (input: ArtifactInput): Promise<ArtifactResult<ArtifactRecord>> => ipcRenderer.invoke('artifacts:create', input),
+    rename: (id: string, revision: number, title: string): Promise<ArtifactResult<ArtifactRecord>> => ipcRenderer.invoke('artifacts:rename', id, revision, title),
+    saveVersion: (id: string, revision: number, body: string, noteIds: string[]): Promise<ArtifactResult<ArtifactRecord>> => ipcRenderer.invoke('artifacts:save-version', id, revision, body, noteIds),
+    export: (id: string, versionId: string): Promise<ArtifactResult<boolean>> => ipcRenderer.invoke('artifacts:export', id, versionId)
+  },
+  collections: {
+    list: (): Promise<CollectionResult<CollectionRecord[]>> => ipcRenderer.invoke('collections:list'),
+    create: (input: CollectionInput): Promise<CollectionResult<CollectionRecord>> => ipcRenderer.invoke('collections:create', input),
+    update: (id: string, revision: number, input: CollectionInput): Promise<CollectionResult<CollectionRecord>> => ipcRenderer.invoke('collections:update', id, revision, input),
+    linkNote: (id: string, revision: number, noteId: string, linked: boolean): Promise<CollectionResult<CollectionRecord>> => ipcRenderer.invoke('collections:link-note', id, revision, noteId, linked),
+    delete: (id: string, revision: number): Promise<CollectionResult<boolean>> => ipcRenderer.invoke('collections:delete', id, revision)
+  },
+  goals: {
+    list: (): Promise<GoalResult<GoalRecord[]>> => ipcRenderer.invoke('goals:list'),
+    create: (input: GoalInput): Promise<GoalResult<GoalRecord>> => ipcRenderer.invoke('goals:create', input),
+    update: (id: string, revision: number, patch: GoalPatch): Promise<GoalResult<GoalRecord>> =>
+      ipcRenderer.invoke('goals:update', id, revision, patch),
+    addCommitment: (id: string, revision: number, input: CommitmentInput): Promise<GoalResult<GoalRecord>> =>
+      ipcRenderer.invoke('goals:add-commitment', id, revision, input),
+    updateCommitment: (id: string, revision: number, commitmentId: string, status: CommitmentStatus): Promise<GoalResult<GoalRecord>> =>
+      ipcRenderer.invoke('goals:update-commitment', id, revision, commitmentId, status),
+    addDecision: (id: string, revision: number, input: DecisionInput): Promise<GoalResult<GoalRecord>> =>
+      ipcRenderer.invoke('goals:add-decision', id, revision, input),
+    addCheckIn: (id: string, revision: number, input: CheckInInput): Promise<GoalResult<GoalRecord>> =>
+      ipcRenderer.invoke('goals:add-checkin', id, revision, input),
+    linkCollection: (id: string, revision: number, collectionId: string, linked: boolean): Promise<GoalResult<GoalRecord>> =>
+      ipcRenderer.invoke('goals:link-collection', id, revision, collectionId, linked),
+    linkNote: (id: string, revision: number, noteId: string, linked: boolean): Promise<GoalResult<GoalRecord>> =>
+      ipcRenderer.invoke('goals:link-note', id, revision, noteId, linked)
   },
   wikis: {
     list: (): Promise<string[]> => ipcRenderer.invoke('wikis:list'),

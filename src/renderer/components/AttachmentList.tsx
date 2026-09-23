@@ -8,6 +8,7 @@ const MAX_PREVIEW = 10
 interface Props {
   note: Note
   onRefresh?: () => void
+  onSaved?: (note: Note) => void
   onNotify: (message: string) => void
 }
 
@@ -17,7 +18,7 @@ function fmtSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export default function AttachmentList({ note, onRefresh, onNotify }: Props): JSX.Element | null {
+export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: Props): JSX.Element | null {
   const attachments = note.attachments || []
   const [missing, setMissing] = useState<Set<string>>(new Set())
   const [imgUrls, setImgUrls] = useState<Record<string, string | null>>({})
@@ -75,28 +76,28 @@ export default function AttachmentList({ note, onRefresh, onNotify }: Props): JS
     }
   }, [attachments, missing])
 
+  async function saveAttachments(attachments: NoteFile[], success: string): Promise<void> {
+    try {
+      const result = await window.api.notes.patch(note.id, note.revision ?? 0, { attachments })
+      if (!result.ok) { onNotify(result.error.message); onRefresh?.(); return }
+      onSaved?.(result.value)
+      onRefresh?.()
+      onNotify(success)
+    } catch (error) { onNotify(`附件更新失败：${String(error)}`) }
+  }
+
   function removeAttachment(storedName: string): void {
-    const updated: Note = {
-      ...note,
-      attachments: (note.attachments || []).filter((a) => a.storedName !== storedName)
-    }
-    void window.api.notes.update(updated).then(() => onRefresh?.())
+    void saveAttachments((note.attachments || []).filter((a) => a.storedName !== storedName), '附件已移除')
   }
 
   async function replaceMissing(storedName: string): Promise<void> {
-    const picked = await window.api.files.select()
-    if (!picked || picked.length === 0) return
-    const updated: Note = {
-      ...note,
-      attachments: [
-        ...(note.attachments || []).filter((a) => a.storedName !== storedName),
-        ...picked
-      ]
-    }
-    void window.api.notes.update(updated).then(() => {
-      onRefresh?.()
-      onNotify('附件已补齐')
-    })
+    try {
+      const picked = await window.api.files.select()
+      if (!picked || picked.length === 0) return
+      await saveAttachments([
+        ...(note.attachments || []).filter((a) => a.storedName !== storedName), ...picked
+      ], '附件已补齐')
+    } catch (error) { onNotify(`选择文件失败：${String(error)}`) }
   }
 
   if (attachments.length === 0) return null

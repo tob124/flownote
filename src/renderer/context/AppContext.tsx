@@ -1,27 +1,26 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
-type PageIndex = 0 | 1 | 2 | 3 | 4 | 5
+export type PageId = 'notes' | 'goals' | 'collections' | 'artifacts' | 'wikis' | 'dream' | 'stats' | 'settings' | 'notifications'
 
 interface AppCtx {
-  pageIndex: PageIndex
-  setPageIndex: (i: PageIndex) => void
+  pageId: PageId
+  setPageId: (id: PageId) => void
   settingsValidated: boolean
-  setSettingsValidated: (v: boolean) => void
+  setSettingsValidated: (value: boolean) => void
 }
 
 const AppContext = createContext<AppCtx>({
-  pageIndex: 0,
-  setPageIndex: () => {},
+  pageId: 'notes',
+  setPageId: () => {},
   settingsValidated: false,
   setSettingsValidated: () => {}
 })
 
 export function AppProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [pageIndex, setPageIndex] = useState<PageIndex>(0)
+  const [pageId, setPageId] = useState<PageId>('notes')
   const [settingsValidated, setSettingsValidated] = useState(false)
-
   return (
-    <AppContext.Provider value={{ pageIndex, setPageIndex, settingsValidated, setSettingsValidated }}>
+    <AppContext.Provider value={{ pageId, setPageId, settingsValidated, setSettingsValidated }}>
       {children}
     </AppContext.Provider>
   )
