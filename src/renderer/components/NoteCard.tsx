@@ -30,6 +30,20 @@ export default memo(function NoteCard({
   const [tip, setTip] = useState<string | null>(null)
   const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  async function toggleFavorite(): Promise<void> {
+    if (busy) return
+    setBusy(true)
+    try {
+      const result = await window.api.notes.patch(note.id, note.revision ?? 0, {
+        favorite: !note.favorite
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      onRefresh()
+      notify(result.value.favorite ? '已收藏' : '已取消收藏')
+    } catch (reason) { notify(String(reason)) }
+    finally { setBusy(false) }
+  }
+
   async function onAttach(): Promise<void> {
     if (busy) return
     setBusy(true)
@@ -60,6 +74,11 @@ export default memo(function NoteCard({
         <span className={`note-card-status ${note.ai_status}`}>
           {STATUS_LABELS[note.ai_status] || note.ai_status}
         </span>
+        <button className={`note-card-favorite-btn${note.favorite ? ' active' : ''}`}
+          onClick={() => void toggleFavorite()} title={note.favorite ? '取消收藏' : '收藏笔记'}
+          aria-label={note.favorite ? '取消收藏' : '收藏笔记'} disabled={busy}>
+          {note.favorite ? '★' : '☆'}
+        </button>
         <button className="note-card-attach-btn" onClick={() => void onAttach()} title="附加文件">
           +
         </button>

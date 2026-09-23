@@ -120,6 +120,16 @@ describe('note storage', () => {
     expect(saveNote(dir, 'new')).not.toBe(id)
   })
 
+  it('preserves a user favorite when AI classification finishes', () => {
+    const dir = library()
+    const id = saveNote(dir, 'worth keeping')
+    expect(patchNote(dir, id, 1, { favorite: true }).favorite).toBe(true)
+    expect(applyAiPatch(dir, id, hashNoteInput('worth keeping'), {
+      title: 'AI title', ai_status: 'done'
+    })).toBe('applied')
+    expect(loadNote(id, dir)?.favorite).toBe(true)
+  })
+
   it('reads legacy numeric notes and resolves effective time without migration', () => {
     const dir = library()
     const old: Note = {

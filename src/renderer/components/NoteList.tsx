@@ -50,7 +50,7 @@ export default function NoteList(): JSX.Element {
   if (filteredNotes.length === 0 && !isLoading) {
     return (
       <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}>
-        暂无笔记
+        没有符合当前搜索或筛选条件的笔记
       </div>
     )
   }

@@ -13,6 +13,7 @@ export interface Note {
   updated_at_ms?: number
   revision?: number
   manual_fields?: Array<'title' | 'summary' | 'category' | 'tags'>
+  favorite?: boolean
   /** Stable import-block identity, retained after a receipt is written. */
   capture_id?: string
   ai_status: 'pending' | 'processing' | 'done' | 'failed'
@@ -31,6 +32,7 @@ export interface NotePatch {
   category?: string
   tags?: string[]
   attachments?: NoteFile[]
+  favorite?: boolean
 }
 export type NotePatchResult =
   | { ok: true; value: Note }

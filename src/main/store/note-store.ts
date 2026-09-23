@@ -76,6 +76,7 @@ export function saveNote(
       ...(captureId ? { capture_id: captureId } : {}),
       ai_status: aiStatus,
       retry_count: 0,
+      favorite: false,
       title: '',
       summary: '',
       category,
@@ -169,6 +170,10 @@ export function patchNote(
     }
     next.tags = [...new Set(patch.tags.map((tag) => tag.trim()).filter(Boolean))]
     manual.add('tags')
+  }
+  if (patch.favorite !== undefined) {
+    if (typeof patch.favorite !== 'boolean') throw new Error('收藏状态无效')
+    next.favorite = patch.favorite
   }
   if (patch.attachments !== undefined) {
     if (!Array.isArray(patch.attachments) || patch.attachments.some((file) =>

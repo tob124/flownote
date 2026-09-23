@@ -526,3 +526,6 @@
 .note-close-prompt p { margin:6px 0 13px; color:var(--text-secondary); font-size:12px; }
 .note-close-prompt>div { display:flex; flex-wrap:wrap; gap:8px; }
 .note-close-prompt button { padding:7px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary); cursor:pointer; }
+
+.note-card-favorite-btn { border:0; background:transparent; color:var(--text-muted); font-size:18px; line-height:1; cursor:pointer; padding:2px 5px; }
+.note-card-favorite-btn:hover,.note-card-favorite-btn.active { color:var(--accent); }

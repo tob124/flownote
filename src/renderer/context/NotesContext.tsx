@@ -5,14 +5,19 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useMemo,
   type ReactNode
 } from 'react'
 import type { Note } from '../../shared/types'
+import { EMPTY_NOTE_FILTERS, filterNotes, type NoteFilters } from '../../shared/note-filters'
 
 interface NotesCtx {
   notes: Note[]
   filteredNotes: Note[]
   searchKeyword: string
+  filters: NoteFilters
+  setFilters: (filters: NoteFilters) => void
+  clearFilters: () => void
   isLoading: boolean
   isRefreshing: boolean
   error: string | null
@@ -26,6 +31,9 @@ const NotesContext = createContext<NotesCtx>({
   notes: [],
   filteredNotes: [],
   searchKeyword: '',
+  filters: EMPTY_NOTE_FILTERS,
+  setFilters: () => {},
+  clearFilters: () => {},
   isLoading: false,
   isRefreshing: false,
   error: null,
@@ -38,6 +46,7 @@ const NotesContext = createContext<NotesCtx>({
 export function NotesProvider({ children }: { children: ReactNode }): JSX.Element {
   const [notes, setNotes] = useState<Note[]>([])
   const [searchKeyword, setSearchKeyword] = useState('')
+  const [filters, setFilters] = useState<NoteFilters>(EMPTY_NOTE_FILTERS)
   const [isLoading, setIsLoading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -138,8 +147,8 @@ export function NotesProvider({ children }: { children: ReactNode }): JSX.Elemen
     void loadNotes()
   }, [loadNotes])
 
-  // The main-process search already applies all supported fields.
-  const filteredNotes = notes
+  // Keyword search is handled by the main process; explicit filters are local.
+  const filteredNotes = useMemo(() => filterNotes(notes, filters), [notes, filters])
 
   return (
     <NotesContext.Provider
@@ -147,6 +156,9 @@ export function NotesProvider({ children }: { children: ReactNode }): JSX.Elemen
         notes,
         filteredNotes,
         searchKeyword,
+        filters,
+        setFilters,
+        clearFilters: () => setFilters(EMPTY_NOTE_FILTERS),
         isLoading,
         isRefreshing,
         error,
