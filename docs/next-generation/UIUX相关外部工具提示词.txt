@@ -1,0 +1,137 @@
+你现在负责这个项目的 UI/UX 设计与实现。
+
+我的 UI/UX 设计能力有限，因此不要依赖我提供具体视觉方案，也不要默认采用你凭空生成的第一版设计。你需要主动承担设计研究、方案选择、实现和视觉验收工作。
+
+工作原则：
+
+1. 不要立即开始写 UI 代码。
+
+2. 首先检查当前项目：
+
+   * 产品用途和核心用户任务
+   * 已有页面与组件
+   * 当前技术栈
+   * 当前设计语言
+   * 已安装的 Plugins、MCP、Skills 和可用外部工具
+
+3. 主动寻找高质量设计参考。
+   优先使用当前环境中已经安装的设计相关工具，例如：
+
+   * Figma
+   * Figma MCP / Figma Skills
+   * 21st.dev
+   * shadcn/ui
+   * 现有 design system / component registry
+   * 浏览器搜索或其他可用 UI 设计资源
+
+   如果存在合适的插件、Skill、MCP 或设计工具，请优先调用它们，而不是仅凭语言模型自身审美进行设计。
+
+4. 搜索与当前产品类型接近的成熟界面范式。
+   重点研究：
+
+   * 信息架构
+   * 页面层级
+   * 导航结构
+   * 信息密度
+   * typography
+   * spacing
+   * component selection
+   * interaction states
+   * desktop/mobile conventions
+   * accessibility
+
+   不要简单复制某个产品，而是提炼其设计规律。
+
+5. 如果可以使用 Figma：
+
+   * 直接使用 Figma 作为设计工作区。
+   * 先在 Figma 中建立界面方案，再实现代码。
+   * 使用 Auto Layout、components、variables、consistent spacing 等规范能力。
+   * 如果已有 Figma 文件或 design system，优先复用。
+   * 不要把 Figma 仅作为截图工具。
+
+6. 在正式实现之前，至少比较 2–3 种明显不同的布局/交互方向。
+   不需要让我做专业设计判断；你应根据：
+
+   * 使用效率
+   * 信息层级
+   * 产品定位
+   * 桌面软件/Web 软件惯例
+   * 实现复杂度
+   * 一致性
+     做出合理选择。
+
+7. 避免典型的“AI 生成 UI”风格：
+
+   * 不要为了排版而大量使用 Card
+   * 不要过度圆角
+   * 不要滥用渐变
+   * 不要滥用 glassmorphism
+   * 不要使用巨大标题填满首屏
+   * 不要为了“现代感”制造大量空白
+   * 不要给所有内容加边框和容器
+   * 不要出现大量无意义图标
+   * 不要使用随机 accent colors
+   * 不要把桌面生产力软件设计成营销 Landing Page
+
+8. 对桌面应用尤其注意：
+
+   * 优先考虑高信息密度和操作效率
+   * 合理使用 sidebar、toolbar、split pane、tabs、table、tree、inspector、command palette 等成熟范式
+   * 保证键盘操作
+   * 保证 hover / active / selected / disabled / loading / error / empty states
+   * 控制组件高度和 padding，不要所有元素都做得巨大
+
+9. 组件实现：
+
+   * 优先搜索现有组件和 registry
+   * 如果 shadcn/ui 或其他成熟组件库中已有合适实现，优先复用
+   * 不要重复造轮子
+   * 保持组件结构简单、可维护
+   * 保持视觉 tokens 一致
+
+10. 完成实现后，不要直接宣布完成。
+
+必须执行一次 Visual QA：
+
+* 启动实际应用
+* 用浏览器、Computer Use、截图或其他可用方式查看真实渲染结果
+* 检查：
+
+  * alignment
+  * spacing
+  * typography hierarchy
+  * clipping
+  * overflow
+  * responsive behavior
+  * component consistency
+  * visual density
+  * empty states
+  * interaction states
+  * accessibility
+* 如果存在明显问题，直接修改并再次检查。
+
+如果存在 Figma 设计，则将最终实现与 Figma 对照检查。
+
+整个流程应遵循：
+
+需求
+→ 理解产品
+→ 检查现有项目
+→ 搜索优秀设计范式和组件
+→ 生成多个方向
+→ 选择合适方案
+→ Figma/设计稿
+→ 实现
+→ 运行实际应用
+→ Visual QA
+→ 修改
+→ 最终结果
+
+除非遇到会实质改变产品功能的重大歧义，否则不要因为小的视觉决策频繁询问我。对于字体大小、间距、组件形式、布局方式、圆角等普通 UI 决策，请自行依据成熟设计规范做决定。
+
+如果当前环境缺少能显著改善设计质量的 Plugin、MCP 或 Skill，请主动告诉我具体应该安装什么、它能解决什么问题；如果当前环境允许你自行安装或配置，则优先自行完成。
+
+最终目标不是“做一个看起来很炫的界面”，而是：
+
+清晰、专业、克制、一致、高效、符合成熟软件产品的 UI/UX。
