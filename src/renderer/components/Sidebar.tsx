@@ -3,12 +3,9 @@ import '../styles/sidebar.css'
 
 const PRIMARY: { id: PageId; label: string; mark: string }[] = [
   { id: 'notes', label: '记录与笔记', mark: '记' },
-  { id: 'goals', label: '我的目标', mark: '标' },
-  { id: 'artifacts', label: '我的成果', mark: '果' },
   { id: 'stats', label: '记录概览', mark: '览' }
 ]
 const LIBRARY: { id: PageId; label: string; mark: string }[] = [
-  { id: 'collections', label: '主题知识库', mark: '库' },
   { id: 'wikis', label: 'Wiki', mark: '知' },
   { id: 'dream', label: 'Dream', mark: '思' }
 ]

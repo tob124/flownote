@@ -32,11 +32,11 @@ describe('note storage', () => {
     expect(loadNote(ids[49], dir)?.raw_content).toBe('note 49')
   })
 
-  it('allocates after existing future-dated IDs in a newly opened library', () => {
+  it('does not let existing future or legacy IDs determine new IDs', () => {
     const dir = library()
     writeFileSync(join(dir, 'notes', '2700000000000.json'), '{}')
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
-    expect(saveNote(dir, 'new')).toBe('2700000000001')
+    expect(saveNote(dir, 'new')).toBe('1700000000000')
   })
 
   it('preserves an existing file when replacement fails before commit', () => {

@@ -4,7 +4,7 @@ import { homedir } from 'os'
 import type { AppConfig } from '../../shared/types'
 import { DEFAULT_CATEGORIES } from '../../shared/types'
 
-const CONFIG_PATH = join(homedir(), '.flownote_config.json')
+const CONFIG_PATH = process.env.FLOWNOTE_CONFIG_PATH || join(homedir(), '.flownote_config.json')
 
 function defaultConfig(): AppConfig {
   return {
@@ -24,7 +24,7 @@ export function loadConfig(): AppConfig {
     const raw = readFileSync(CONFIG_PATH, 'utf-8')
     const data = JSON.parse(raw)
     const defaults = defaultConfig()
-    return { ...defaults, ...data }
+    return { ...defaults, ...data, ...(process.env.FLOWNOTE_API_KEY ? {api_key:process.env.FLOWNOTE_API_KEY} : {}) }
   } catch {
     return defaultConfig()
   }

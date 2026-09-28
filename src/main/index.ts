@@ -1,3 +1,4 @@
+import { startThinkingService, stopThinkingService } from './services/thinking-service'
 import { app, BrowserWindow, dialog, shell, protocol, net } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
@@ -13,6 +14,9 @@ import { registerAllIpc } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
 let classifierService: ClassifierService | null = null
+
+// Isolated verification profiles must not share drafts or the user's app lock.
+if (process.env.FLOWNOTE_CONFIG_PATH) app.setPath('userData', join(process.env.FLOWNOTE_CONFIG_PATH, '..', 'electron-profile'))
 
 // 自定义协议：以同源方式提供附件本地文件，规避 file:// 跨源被拦截，
 // 保证开发(http)与生产(file)环境下 <img> 都能正常显示附件图片。
@@ -60,21 +64,8 @@ function createWindow(): BrowserWindow {
     win.show()
   })
 
-  win.on('close', (e) => {
-    const dreamState = loadDreamState()
-    if (dreamState.dream_in_progress) {
-      e.preventDefault()
-      dialog.showMessageBox(win, {
-        type: 'warning',
-        title: 'Dream 进行中',
-        message: 'Dream 正在进行中，请等待完成后再关闭应用。',
-        buttons: ['确定']
-      })
-    }
-  })
-
   win.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (/^https?:\/\//i.test(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
@@ -119,6 +110,7 @@ if (!app.requestSingleInstanceLock()) {
     setClassifierInstance(classifierService)
     classifierService.start(mainWindow)
 
+    startThinkingService()
     inboxWatcher.init()
 
     app.on('activate', () => {
@@ -130,6 +122,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.on('window-all-closed', () => {
+    stopThinkingService()
     classifierService?.stop()
     setClassifierInstance(null)
     inboxWatcher.stop()

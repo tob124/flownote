@@ -1,3 +1,4 @@
+import { newestFirst } from '../../shared/note-time'
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, renameSync } from 'fs'
 import { createHash } from 'crypto'
 import { join } from 'path'
@@ -30,20 +31,12 @@ export function ensureDirectories(syncDir: string): void {
 
 /** Keep old numeric IDs while preventing collisions in rapid or clock-skewed saves. */
 export function allocateNoteId(notesDir: string): string {
-  let last = lastAllocatedByDir.get(notesDir)
-  if (last === undefined) {
-    last = 0
-    for (const dir of [notesDir, join(notesDir, '..', 'trash', 'notes'), join(notesDir, '..', 'trash', 'deleted')]) {
-      if (!existsSync(dir)) continue
-      for (const name of readdirSync(dir)) {
-        if (!/^\d{13,}\.json$/.test(name)) continue
-        const id = Number(name.slice(0, -5))
-        if (Number.isSafeInteger(id)) last = Math.max(last, id)
-      }
-    }
-  }
+  const last = lastAllocatedByDir.get(notesDir) ?? 0
   let candidate = Math.max(Date.now(), last + 1)
-  while (existsSync(join(notesDir, `${candidate}.json`))) candidate++
+  const occupied = (id: number): boolean => [
+    notesDir, join(notesDir, '..', 'trash', 'notes'), join(notesDir, '..', 'trash', 'deleted')
+  ].some((dir) => existsSync(join(dir, `${id}.json`)))
+  while (occupied(candidate)) candidate++
   if (!Number.isSafeInteger(candidate)) throw new Error('Note ID space exhausted')
   lastAllocatedByDir.set(notesDir, candidate)
   return String(candidate)
@@ -110,7 +103,8 @@ export function loadAllNotesFrom(syncDir: string): Note[] {
       if (existsSync(join(syncDir, 'trash', 'deleted', file))) continue
       try {
         const raw = readFileSync(join(notesDir, file), 'utf-8')
-        notes.push(JSON.parse(raw))
+        const note = JSON.parse(raw.replace(/^\uFEFF/, ''))
+        if (typeof note.id === 'string' && typeof note.raw_content === 'string' && typeof note.created_at === 'string') notes.push(note)
       } catch {
         // A partially synced or damaged file must not hide other notes.
       }
@@ -118,7 +112,7 @@ export function loadAllNotesFrom(syncDir: string): Note[] {
   } catch (error) {
     throw new Error(`无法读取笔记目录：${String(error)}`)
   }
-  notes.sort((a, b) => b.id.localeCompare(a.id))
+  notes.sort(newestFirst)
   return notes
 }
 
@@ -268,7 +262,7 @@ export function listTrashedNotes(syncDir: string): Note[] {
       if (note.id === name.slice(0, -5)) notes.push(note)
     } catch { /* A damaged sync file must not hide other recoverable notes. */ }
   }
-  return notes.sort((a, b) => b.id.localeCompare(a.id))
+  return notes.sort(newestFirst)
 }
 
 export function restoreNote(syncDir: string, id: string): boolean {

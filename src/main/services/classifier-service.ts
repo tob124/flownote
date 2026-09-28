@@ -1,3 +1,4 @@
+import { newestFirst } from '../../shared/note-time'
 import { BrowserWindow } from 'electron'
 import { applyAiPatch, getSyncDir, hashNoteInput, loadAllNotesFrom, loadNote } from '../store/note-store'
 import { loadConfig } from '../store/config-store'
@@ -20,6 +21,7 @@ export class ClassifierService {
   private win: BrowserWindow | null = null
 
   start(win?: BrowserWindow): void {
+    if (this._running) { if (win) this.win=win; return }
     this._running = true
     if (win) this.win = win
     this.schedule()
@@ -79,18 +81,10 @@ export class ClassifierService {
 
       const pending = allNotes
         .filter((note) => note.ai_status === 'pending')
-        .sort((a, b) => a.id.localeCompare(b.id))
+        .sort((a, b) => newestFirst(b,a))
         .slice(0, 3)
 
-      if (pending.length === 0) {
-        if (this._poke) {
-          this._poke = false
-          this.timerId = setTimeout(() => {
-            void this.processQueue().finally(() => this.schedule())
-          }, 1000)
-        }
-        return
-      }
+      if (pending.length === 0) { this._poke = false; return }
       this._poke = false
 
       const inputs = new Map<string, string>()

@@ -1,3 +1,4 @@
+import ThoughtPanel from './ThoughtPanel'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -144,6 +145,7 @@ export default function NoteDetailDialog({ note, onClose, onRefresh }: Props): J
           {viewNote.summary && <div className="note-detail-summary">{viewNote.summary}</div>}
           <div className="note-detail-content markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{viewNote.raw_content}</ReactMarkdown></div>
           {viewNote.tags?.length > 0 && <div className="note-card-tags">{viewNote.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>}
+          <ThoughtPanel owner={{kind:'note',id:viewNote.id}} />
           <AttachmentList note={viewNote} onSaved={setViewNote} onRefresh={onRefresh} onNotify={notify} />
         </>}
         {closePrompt && <div className="note-close-prompt" role="alertdialog" aria-label="退出编辑选择">

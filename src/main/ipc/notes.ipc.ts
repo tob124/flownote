@@ -1,10 +1,16 @@
 import { ipcMain } from 'electron'
-import { loadAllNotes, saveNote, updateNote, patchNote, NoteConflictError, searchNotes, deleteNote, listTrashedNotes, restoreNote, deleteNoteForever } from '../store/note-store'
+import { loadNote, loadAllNotes, saveNote, updateNote, patchNote, NoteConflictError, searchNotes, deleteNote, listTrashedNotes, restoreNote, deleteNoteForever } from '../store/note-store'
 import { loadConfig } from '../store/config-store'
 import { IPC_CHANNELS } from '../../shared/types'
 import type { Note, NotePatch, NotePatchResult } from '../../shared/types'
 
 export function registerNotesIpc(): void {
+  ipcMain.handle('notes:create-record', (_e, content: string) => {
+    const dir = loadConfig().sync_dir
+    if (!dir || typeof content !== 'string' || !content.trim() || content.length > 1000000) throw new Error('笔记内容或目录无效')
+    const id = saveNote(dir,content)
+    return loadNote(id,dir)!
+  })
   ipcMain.handle(IPC_CHANNELS.NOTES_LOAD_ALL, () => loadAllNotes())
 
   ipcMain.handle(IPC_CHANNELS.NOTES_SEARCH, (_e, keyword: string) => searchNotes(keyword))

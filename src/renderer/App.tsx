@@ -8,9 +8,6 @@ import { DreamProvider } from './context/DreamContext'
 import { NotificationProvider } from './context/NotificationContext'
 import Sidebar from './components/Sidebar'
 import NotesPage from './pages/NotesPage'
-import GoalsPage from './pages/GoalsPage'
-import CollectionsPage from './pages/CollectionsPage'
-import ArtifactsPage from './pages/ArtifactsPage'
 import StatsPage from './pages/StatsPage'
 import WikisPage from './pages/WikisPage'
 import DreamPage from './pages/DreamPage'
@@ -51,14 +48,12 @@ function AppShell(): JSX.Element {
   function renderPage(): JSX.Element {
     switch (pageId) {
       case 'notes': return <NotesPage />
-      case 'goals': return <GoalsPage />
-      case 'collections': return <CollectionsPage />
-      case 'artifacts': return <ArtifactsPage />
       case 'wikis': return <WikisPage />
       case 'dream': return <DreamPage />
       case 'stats': return <StatsPage />
       case 'settings': return <SettingsPage />
       case 'notifications': return <NotificationsPage />
+      default: return <NotesPage />
     }
   }
 

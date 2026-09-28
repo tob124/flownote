@@ -1,4 +1,5 @@
 import type { Note } from './types'
+import { newestFirst, noteDate } from './note-time'
 
 export interface NoteFilters {
   category: string
@@ -19,9 +20,9 @@ export function filterNotes(notes: Note[], filters: NoteFilters): Note[] {
     if (filters.favoriteOnly && !note.favorite) return false
     if (filters.status && note.ai_status !== filters.status) return false
     if (filters.tags.length && !filters.tags.some((tag) => (note.tags || []).includes(tag))) return false
-    if (filters.from && note.created_at < filters.from) return false
-    if (filters.to && note.created_at > filters.to) return false
+    if (filters.from && noteDate(note) < filters.from) return false
+    if (filters.to && noteDate(note) > filters.to) return false
     return true
   }).sort((a, b) => filters.sort === 'newest'
-    ? b.id.localeCompare(a.id) : a.id.localeCompare(b.id))
+    ? newestFirst(a, b) : newestFirst(b, a))
 }

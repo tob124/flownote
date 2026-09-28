@@ -17,9 +17,11 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "app:dir": "electron-builder --dir",
-    "app:dist": "electron-builder"
+    "app:dist": "electron-builder",
+    "test:e2e": "npm run build && node scripts/verify-thinking.mjs"
   },
   "dependencies": {
+    "cheerio": "1.0.0",
     "electron-squirrel-startup": "^1.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -47,6 +49,7 @@
     "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
     "jsdom": "25.0.1",
+    "playwright-core": "1.55.0",
     "typescript": "^5.4.0",
     "vitest": "2.1.9"
   },

@@ -42,7 +42,7 @@ export default function QuickInput(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [pendingFiles, setPendingFiles] = useState<NoteFile[]>([])
   const [attaching, setAttaching] = useState(false)
-  const { addNote } = useNotes()
+  const { addNote, savedId, revealNote } = useNotes()
   const { config } = useConfig()
   const recognitionRef = useRef<SpeechRecognitionConfig | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -239,6 +239,7 @@ export default function QuickInput(): JSX.Element {
           ))}
         </div>
       )}
+      {savedId && <p role="status">已保存 <button type="button" onClick={()=>revealNote(savedId)}>查看笔记</button></p>}
       {error && <div className="quick-input-error">{error}</div>}
       <textarea
         className={`quick-input${expanded ? ' expanded' : ''}`}

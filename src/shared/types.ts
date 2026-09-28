@@ -39,6 +39,8 @@ export type NotePatchResult =
   | { ok: false; error: { code: 'INVALID' | 'NOT_FOUND' | 'CONFLICT' | 'IO'; message: string } }
 
 export interface AppConfig {
+  ai_comments?: boolean
+  ai_auto_dream?: boolean
   sync_dir: string
   api_provider: 'DeepSeek' | 'Gemini'
   api_key: string

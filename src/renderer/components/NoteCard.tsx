@@ -1,3 +1,4 @@
+import ThoughtPanel from './ThoughtPanel'
 import { memo, useRef, useState } from 'react'
 import type { Note } from '../../shared/types'
 import AttachmentList from './AttachmentList'
@@ -67,7 +68,7 @@ export default memo(function NoteCard({
   }
 
   return (
-    <div className="note-card">
+    <div className="note-card" id={'note-'+note.id}>
       <div className="note-card-header">
         <span className="note-card-category">{note.category || 'Inbox'}</span>
         <span className="note-card-date">{note.created_at}</span>
@@ -111,6 +112,7 @@ export default memo(function NoteCard({
         阅读 / 编辑
       </button>
 
+      <ThoughtPanel owner={{kind:'note',id:note.id}} noteLabel={note.title||note.raw_content} compact />
       <AttachmentList note={note} onRefresh={onRefresh} onNotify={notify} />
 
       {tip && <div className="note-card-tip">{tip}</div>}

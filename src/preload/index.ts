@@ -1,3 +1,4 @@
+import type { AiJob, Owner, Feedback, InsightView, DreamReport } from '../shared/insights'
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Note, NotePatch, NotePatchResult, AppConfig, DreamMeta, NotificationItem, NoteFile } from '../shared/types'
 import type { ArtifactInput, ArtifactRecord, ArtifactResult } from '../shared/artifacts'
@@ -5,7 +6,20 @@ import type { CollectionInput, CollectionRecord, CollectionResult } from '../sha
 import type { CheckInInput, CommitmentInput, CommitmentStatus, DecisionInput, GoalInput, GoalPatch, GoalRecord, GoalResult } from '../shared/goals'
 
 const api = {
+  thinking: {
+    view: (owner:Owner):Promise<InsightView> => ipcRenderer.invoke('thinking:view',owner),
+    run: (id:string,kind:'comment'|'research'):Promise<AiJob> => ipcRenderer.invoke('thinking:run',id,kind),
+    reply: (owner:Owner,text:string):Promise<AiJob> => ipcRenderer.invoke('thinking:reply',owner,text),
+    action: (id:string,action:'cancel'|'retry'):Promise<void> => ipcRenderer.invoke('thinking:action',id,action),
+    feedback: (owner:Owner,feedback:Feedback,id?:string):Promise<void> => ipcRenderer.invoke('thinking:feedback',owner,feedback,id),
+    correction: (id:string,decision:'accept'|'deny'):Promise<void> => ipcRenderer.invoke('thinking:correction',id,decision),
+    reports: ():Promise<DreamReport[]> => ipcRenderer.invoke('thinking:reports'),
+    jobs: ():Promise<AiJob[]> => ipcRenderer.invoke('thinking:jobs'),
+    dream: ():Promise<AiJob> => ipcRenderer.invoke('thinking:dream'),
+    exportLegacy: ():Promise<boolean> => ipcRenderer.invoke('thinking:legacy-export')
+  },
   notes: {
+    createRecord: (content:string):Promise<Note> => ipcRenderer.invoke('notes:create-record',content),
     loadAll: (): Promise<Note[]> => ipcRenderer.invoke('notes:load-all'),
     search: (keyword: string): Promise<Note[]> => ipcRenderer.invoke('notes:search', keyword),
     create: (content: string): Promise<string> => ipcRenderer.invoke('notes:create', content),

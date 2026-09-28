@@ -8,7 +8,7 @@ import type { Note } from '../../shared/types'
 const PAGE_SIZE = 15
 
 export default function NoteList(): JSX.Element {
-  const { filteredNotes, isLoading, isRefreshing, error, deleteNote, loadNotes } = useNotes()
+  const { focusId, filteredNotes, isLoading, isRefreshing, error, deleteNote, loadNotes } = useNotes()
   const { config, isLoaded, save } = useConfig()
   const [visible, setVisible] = useState(PAGE_SIZE)
   const [grid, setGrid] = useState(config.notes_view === 'grid')
@@ -27,8 +27,10 @@ export default function NoteList(): JSX.Element {
 
   // When the search keyword or note set changes, reset pagination to the top.
   useEffect(() => {
-    setVisible(PAGE_SIZE)
-  }, [filteredNotes])
+    const index = filteredNotes.findIndex(n=>n.id===focusId)
+    setVisible(Math.max(PAGE_SIZE,index+1))
+  }, [filteredNotes,focusId])
+  useEffect(()=>{ if(focusId) document.getElementById('note-'+focusId)?.scrollIntoView({block:'center'}) },[visible,focusId,filteredNotes])
 
   // Full loading only on first load when no notes exist yet
   if (isLoading && filteredNotes.length === 0) {
@@ -39,10 +41,10 @@ export default function NoteList(): JSX.Element {
     )
   }
 
-  if (error) {
+  if (error && filteredNotes.length === 0) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger)' }}>
-        {error}
+        {error}<button onClick={()=>void loadNotes()}>重试</button>
       </div>
     )
   }
@@ -60,6 +62,7 @@ export default function NoteList(): JSX.Element {
 
   return (
     <div>
+      {error && <p role="alert">{error} <button onClick={()=>void loadNotes()}>重试</button></p>}
       {isRefreshing && (
         <div
           style={{

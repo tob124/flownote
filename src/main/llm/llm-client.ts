@@ -1,3 +1,5 @@
+import { limited } from './request-limit'
+import { AI_MODELS } from './models'
 import { getLogger } from '../utils/logger'
 import { retryOnFailure } from '../utils/helpers'
 
@@ -6,8 +8,8 @@ const log = getLogger('llm')
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions'
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 
-const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash'
-const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash'
+const DEFAULT_DEEPSEEK_MODEL = AI_MODELS.deepseek
+const DEFAULT_GEMINI_MODEL = AI_MODELS.gemini
 
 interface LlmOptions {
   isJson?: boolean
@@ -117,7 +119,7 @@ async function callGemini(
   }
 }
 
-export async function callLlm(
+async function callLlmUnbounded(
   provider: 'DeepSeek' | 'Gemini',
   apiKey: string,
   prompt: string,
@@ -144,4 +146,8 @@ export async function callLlm(
     log.error(`LLM request failed after retries: ${e}`)
     return null
   }
+}
+
+export function callLlm(...args: Parameters<typeof callLlmUnbounded>): Promise<string | null> {
+  return limited(() => callLlmUnbounded(...args))
 }
