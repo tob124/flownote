@@ -1,6 +1,7 @@
+import { mayLeave } from '../utils/workspace'
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
-export type PageId = 'notes' | 'goals' | 'collections' | 'artifacts' | 'wikis' | 'dream' | 'stats' | 'settings' | 'notifications'
+export type PageId = 'notes' | 'wikis' | 'dream' | 'stats' | 'settings' | 'notifications'
 
 interface AppCtx {
   pageId: PageId
@@ -17,7 +18,8 @@ const AppContext = createContext<AppCtx>({
 })
 
 export function AppProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [pageId, setPageId] = useState<PageId>('notes')
+  const [pageId, updatePage] = useState<PageId>('notes')
+  const setPageId = (id: PageId): void => { if(id === pageId || mayLeave()) updatePage(id) }
   const [settingsValidated, setSettingsValidated] = useState(false)
   return (
     <AppContext.Provider value={{ pageId, setPageId, settingsValidated, setSettingsValidated }}>

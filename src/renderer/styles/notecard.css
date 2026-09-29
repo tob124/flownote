@@ -4,8 +4,8 @@
   padding: 16px 18px;
   border: 1px solid var(--border-light);
   box-shadow: var(--shadow-card);
-  transition: all 0.25s ease;
-  animation: fadeIn 0.3s ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  animation: none;
 }
 
 /* 列表视图：单列纵向排列 */
@@ -56,7 +56,7 @@
   padding: 3px 10px;
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
 .note-list-view-btn:hover {
@@ -119,7 +119,7 @@
   color: #2196F3;
   background: rgba(33, 150, 243, 0.12);
   border: 1px solid rgba(33, 150, 243, 0.2);
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: none;
 }
 
 .note-card-status.done {
@@ -156,7 +156,7 @@
   align-items: center;
   justify-content: center;
   line-height: 1;
-  transition: all 0.2s ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
 .note-card-delete-btn:hover {
@@ -237,7 +237,7 @@
   background: rgba(212, 165, 116, 0.08);
   border-radius: 10px;
   border: 1px solid rgba(212, 165, 116, 0.15);
-  transition: all 0.2s ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
 .note-card-tags span:hover {
@@ -259,7 +259,7 @@
   align-items: center;
   justify-content: center;
   margin-left: 6px;
-  transition: all 0.2s ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
 .note-card-attach-btn:hover {
@@ -276,7 +276,7 @@
   border: 1px solid rgba(212, 165, 116, 0.15);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
-  animation: fadeIn 0.3s ease;
+  animation: none;
 }
 
 /* 网格视图：查看全文按钮 */
@@ -290,7 +290,7 @@
   border-radius: var(--radius-sm);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
 .note-card-detail-btn:hover {
@@ -308,7 +308,7 @@
   align-items: center;
   justify-content: center;
   z-index: 2100;
-  animation: fadeIn 0.2s ease;
+  animation: none;
 }
 
 .note-detail-dialog {
@@ -324,7 +324,7 @@
   padding: 28px 40px;
   position: relative;
   overflow: hidden;
-  animation: zoomIn 0.18s ease;
+  animation: none;
 }
 
 /* 沉浸式阅读窗口右上角的全局关闭按钮 */

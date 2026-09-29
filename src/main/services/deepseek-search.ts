@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import type { SourceEvidence, Usage } from '../../shared/insights'
 import { limited } from '../llm/request-limit'
-import { AI_MODELS } from '../llm/models'
+import { AI_MODELS, AI_LIMITS } from '../llm/models'
 import { sourceUrl } from './source-reader'
 
 export function parseSearch(data: any): { sources: SourceEvidence[]; usage: Usage } {
@@ -33,18 +33,20 @@ export function parseSearch(data: any): { sources: SourceEvidence[]; usage: Usag
     searches: data.usage?.server_tool_use?.web_search_requests ?? 0
   } }
 }
-export async function searchDeepseek(key: string, query: string, signal: AbortSignal): Promise<ReturnType<typeof parseSearch>> {
+export async function searchDeepseek(key: string, query: string, signal: AbortSignal, onResponse?: (data:any)=>void): Promise<ReturnType<typeof parseSearch>> {
   return limited(async () => {
     const response = await fetch('https://api.deepseek.com/anthropic/v1/messages', {
       method: 'POST', redirect:'error', signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]),
       headers: { 'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01' },
       body: JSON.stringify({
         model: AI_MODELS.deepseek, max_tokens: 2000,
-        messages: [{ role:'user', content:'Run one focused web search for the query below. Prefer author, publisher, university or professional institution pages with readable HTML. Exclude PDFs, Office files and login-only pages: the reader supports public HTML only. Keep the target population and subject of the query; do not substitute a narrower group such as children or patients without reason. Return sources briefly; do not research additional topics or answer the underlying question. Query: ' + query.slice(0,600) + ' -filetype:pdf -filetype:docx -filetype:doc' }],
-        tools: [{ type:'web_search_20250305', name:'web_search', max_uses:2 }]
+        messages: [{ role:'user', content:'Run one focused web search for the query below. Prefer author, publisher, university or professional institution pages, open-access publisher papers, author manuscripts, institutional repositories and PMC with readable HTML, XML or text PDF. Avoid login-only sources. Keep the target population and subject of the query; do not substitute a narrower group such as children or patients without reason. Return sources briefly; do not research additional topics or answer the underlying question. Query: ' + query.slice(0,600) }],
+        tools: [{ type:'web_search_20250305', name:'web_search', max_uses:AI_LIMITS.serverSearches }]
       })
     })
     if (!response.ok) throw new Error('联网搜索失败（' + response.status + '）')
-    return parseSearch(await response.json())
+    const data=await response.json()
+    onResponse?.(data)
+    return parseSearch(data)
   }, signal)
 }

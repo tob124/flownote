@@ -14,7 +14,7 @@ vi.mock('../src/renderer/context/NotesContext', () => ({
 }))
 vi.mock('../src/renderer/components/QuickInput', () => ({ default: () => <div>快速输入区</div> }))
 vi.mock('../src/renderer/components/SearchBar', () => ({ default: () => <div>搜索区</div> }))
-vi.mock('../src/renderer/components/NoteList', () => ({ default: () => <div>笔记列表</div> }))
+vi.mock('../src/renderer/components/NotesWorkspace', () => ({ default: ({onTrash}:{onTrash:()=>void}) => <button onClick={onTrash}>回收站</button> }))
 afterEach(() => {
   cleanup()
   if (state.dir) rmSync(state.dir, { recursive: true, force: true })

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { ConfigProvider, useConfig } from './context/ConfigContext'
@@ -6,6 +6,8 @@ import { NotesProvider } from './context/NotesContext'
 import { WikisProvider } from './context/WikisContext'
 import { DreamProvider } from './context/DreamContext'
 import { NotificationProvider } from './context/NotificationContext'
+import { SpatialPanel } from './components/ui/SpatialPanel'
+import { Button } from './components/ui/Controls'
 import Sidebar from './components/Sidebar'
 import NotesPage from './pages/NotesPage'
 import StatsPage from './pages/StatsPage'
@@ -19,6 +21,10 @@ import './styles/themes/draft.css'
 import './styles/themes/paper.css'
 
 function AppShell(): JSX.Element {
+  const [focusMode,setFocusMode]=useState(false)
+  const [navigationOpen,setNavigationOpen]=useState(()=>{try{return localStorage.getItem('flownote:navigation')!=='closed'}catch{return true}})
+  const toggleNavigation=():void=>{setNavigationOpen(v=>{try{localStorage.setItem('flownote:navigation',v?'closed':'open')}catch{}return !v})}
+  useEffect(()=>{const change=(e:Event):void=>setFocusMode((e as CustomEvent<boolean>).detail);window.addEventListener('flownote:focus-mode',change);return()=>window.removeEventListener('flownote:focus-mode',change)},[])
   const { pageId, setPageId } = useApp()
   const { config, isLoaded } = useConfig()
   const { setTheme, applyFont, clearFont } = useTheme()
@@ -58,7 +64,7 @@ function AppShell(): JSX.Element {
   }
 
   return (
-    <div
+    <div className="app-shell"
       style={{
         display: 'flex',
         height: '100vh',
@@ -66,8 +72,9 @@ function AppShell(): JSX.Element {
         color: 'var(--text-primary)'
       }}
     >
-      <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+      <SpatialPanel open={!focusMode && navigationOpen} side="left" className="app-navigation"><Sidebar onCollapse={toggleNavigation}/></SpatialPanel>
+      {!focusMode && !navigationOpen && <div className="navigation-rail"><Button variant="quiet" aria-label="展开导航" onClick={toggleNavigation}>☰</Button></div>}
+      <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
         {renderPage()}
       </div>
     </div>

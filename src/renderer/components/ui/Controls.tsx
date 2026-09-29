@@ -26,14 +26,30 @@ export const Button=forwardRef<HTMLButtonElement,ButtonHTMLAttributes<HTMLButton
 export interface MenuItem {label:string;onSelect:()=>void;icon?:IconName;disabled?:boolean;danger?:boolean;separator?:boolean}
 export function ActionMenu({label='更多操作',items,children}:{label?:string;items:MenuItem[];children?:ReactNode}):JSX.Element{
   const [open,setOpen]=useState(false),[position,setPosition]=useState({left:0,top:0})
+  const [present,setPresent]=useState(false)
+  const animation=useRef<Animation|null>(null)
   const trigger=useRef<HTMLButtonElement>(null),menu=useRef<HTMLDivElement>(null)
-  const close=(restore=false):void=>{setOpen(false);if(restore)trigger.current?.focus()}
+  const close=(restore=false):void=>{setOpen(false);if(restore)trigger.current?.focus({ preventScroll: true })}
   useLayoutEffect(()=>{
-    if(!open)return
-    const box=trigger.current!.getBoundingClientRect(),height=menu.current?.offsetHeight||200
-    setPosition({left:Math.max(8,Math.min(box.right-224,window.innerWidth-232)),top:box.bottom+height+12<window.innerHeight?box.bottom+6:Math.max(8,box.top-height-6)})
-    menu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+    const node=menu.current
+    if(!node)return
+    node.inert=!open
+    const box=trigger.current!.getBoundingClientRect(),height=node.offsetHeight||200
+    const below=box.bottom+height+12<window.innerHeight
+    if(open){
+      setPresent(true)
+      setPosition({left:Math.max(8,Math.min(box.right-224,window.innerWidth-232)),top:below?box.bottom+6:Math.max(8,box.top-height-6)})
+      node.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
+    }
+    const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const start=animation.current?{opacity:getComputedStyle(node).opacity,transform:getComputedStyle(node).transform}:{opacity:open?0:1,transform:open&&!reduced?'translateY('+(below?'-6px':'6px')+')':'none'}
+    animation.current?.cancel()
+    if(!node.animate){if(!open)setPresent(false);return}
+    const current=node.animate([start,{opacity:open?1:0,transform:!open&&!reduced?'translateY('+(below?'-6px':'6px')+')':'none'}],{duration:reduced?80:160,easing:'cubic-bezier(0.23, 1, 0.32, 1)'})
+    animation.current=current
+    current.onfinish=()=>{if(animation.current===current){animation.current=null;if(!open)setPresent(false)}}
   },[open])
+  useEffect(()=>()=>{animation.current?.cancel()},[])
   useEffect(()=>{
     if(!open)return
     const outside=(e:PointerEvent):void=>{if(!menu.current?.contains(e.target as Node)&&!trigger.current?.contains(e.target as Node))close()}
@@ -44,10 +60,10 @@ export function ActionMenu({label='更多操作',items,children}:{label?:string;
   // Portals inside a modal must remain inside its top layer and focus boundary.
   const host=trigger.current?.closest('dialog')||document.body
   return <><Button ref={trigger} variant="quiet" icon={children?undefined:'more'} iconOnly={!children} title={label} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={()=>setOpen(v=>!v)}>{children}</Button>
-    {open&&createPortal(<div ref={menu} className="fn-menu" role="menu" aria-label={label} style={position} onKeyDown={e=>{
+    {(open||present)&&createPortal(<div ref={menu} className="fn-menu" role="menu" aria-hidden={!open} aria-label={label} style={position} onKeyDown={e=>{
       const buttons=[...menu.current!.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')],index=buttons.indexOf(document.activeElement as HTMLButtonElement)
       if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close(true)}
       else if(e.key==='Tab')close(true)
-      else if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:buttons.length-1))%buttons.length]?.focus()}
+      else if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:buttons.length-1))%buttons.length]?.focus({ preventScroll: true })}
     }}>{items.map((item,i)=><button key={i} role="menuitem" className={(item.danger?'danger ':'')+(item.separator?'separated':'')} disabled={item.disabled} onClick={()=>{close(true);item.onSelect()}}>{item.icon&&<Icon name={item.icon}/>}<span>{item.label}</span></button>)}</div>,host)}</>
 }

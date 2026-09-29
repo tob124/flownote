@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
+import { ActionMenu, Button } from './ui/Controls'
 import type { Note, NoteFile } from '../../shared/types'
 
-const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']
 const PREVIEW_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
 const MAX_PREVIEW = 10
 
@@ -20,6 +20,10 @@ function fmtSize(bytes: number): string {
 
 export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: Props): JSX.Element | null {
   const attachments = note.attachments || []
+  const [pendingDelete,setPendingDelete]=useState<string | null>(null)
+  async function open(storedName:string,reveal=false):Promise<void>{
+    try{const result=await window.api.files.open(note.id,storedName,reveal);if(!result.ok)onNotify(result.error || '打开失败')}catch(error){onNotify(String(error))}
+  }
   const [missing, setMissing] = useState<Set<string>>(new Set())
   const [imgUrls, setImgUrls] = useState<Record<string, string | null>>({})
   const [loadingMissing, setLoadingMissing] = useState(true)
@@ -102,66 +106,18 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
 
   if (attachments.length === 0) return null
 
-  const display = attachments.slice(0, 20)
-
-  return (
-    <div className="attachment-list">
-      {display.map((a: NoteFile) => {
-        const isImage = PREVIEW_EXTS.includes(a.ext)
-        const isMissing = missing.has(a.storedName)
-        return (
-          <div key={a.storedName} className={`attachment-item${isMissing ? ' missing' : ''}`}>
-            {isMissing ? (
-              <div className="attachment-missing">
-                <span className="attachment-name">⚠ 文件缺失：{a.name}</span>
-                <button onClick={() => void replaceMissing(a.storedName)}>补齐</button>
-                <button onClick={() => removeAttachment(a.storedName)}>移除</button>
-              </div>
-            ) : isImage ? (
-              <div className="attachment-img">
-                {imgUrls[a.storedName] ? (
-                  <img
-                    src={imgUrls[a.storedName] ?? undefined}
-                    alt={a.name}
-                    title={a.name}
-                  />
-                ) : (
-                  <span className="attachment-name">🖼 {a.name}</span>
-                )}
-                <button
-                  className="attachment-remove"
-                  onClick={() => removeAttachment(a.storedName)}
-                  title="移除附件"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <div className="attachment-file">
-                <button
-                  className="attachment-name"
-                  onClick={() => void window.api.files.open(a.storedName)}
-                  title={`打开 ${a.name}`}
-                >
-                  📄 {a.name}（{fmtSize(a.size)}）
-                </button>
-                <button
-                  className="attachment-remove"
-                  onClick={() => removeAttachment(a.storedName)}
-                  title="移除附件"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-          </div>
-        )
-      })}
-      {attachments.length > 20 && (
-        <div className="attachment-name" style={{ color: 'var(--text-muted)' }}>
-          … 还有 {attachments.length - 20} 个附件
-        </div>
-      )}
-    </div>
-  )
+  return <div className="attachment-list">
+    {attachments.map(a => <div key={a.storedName} className="attachment-item">
+      <button className="attachment-open" onClick={()=>void open(a.storedName)} title={'使用默认应用打开 '+a.name}>
+        {imgUrls[a.storedName] && !missing.has(a.storedName) && <img src={imgUrls[a.storedName]!} alt=""/>}
+        <span>{a.name} · {fmtSize(a.size)}{missing.has(a.storedName)?' · 文件缺失':''}</span>
+      </button>
+      <ActionMenu label={'附件操作：'+a.name} items={[
+        {label:'在文件夹中显示',onSelect:()=>void open(a.storedName,true)},
+        ...(missing.has(a.storedName)?[{label:'补齐文件',onSelect:()=>void replaceMissing(a.storedName)}]:[]),
+        {label:'移除附件',danger:true,separator:true,onSelect:()=>setPendingDelete(a.storedName)}
+      ]}/>
+      {pendingDelete===a.storedName && <div role="group" aria-label="移除附件确认">从笔记中移除此附件？<Button variant="danger" onClick={()=>{removeAttachment(a.storedName);setPendingDelete(null)}}>确认移除</Button><Button onClick={()=>setPendingDelete(null)}>取消</Button></div>}
+    </div>)}
+  </div>
 }

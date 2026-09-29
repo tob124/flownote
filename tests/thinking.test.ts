@@ -9,8 +9,9 @@ vi.mock('../src/main/llm/thinking-client',async(importOriginal)=>{
   const original=await importOriginal<typeof import('../src/main/llm/thinking-client')>()
   return {...original,generate:env.generate}
 })
-vi.mock('../src/main/services/deepseek-search',()=>({searchDeepseek:env.search}))
+vi.mock('../src/main/services/deepseek-search',async(importOriginal)=>({...await importOriginal<typeof import('../src/main/services/deepseek-search')>(),searchDeepseek:env.search}))
 vi.mock('../src/main/services/source-reader',()=>({readPublicPage:env.page}))
+import { GenerationError } from '../src/main/llm/thinking-client'
 import { saveNote, loadNote, patchNote, hashNoteInput } from '../src/main/store/note-store'
 import { enqueue, tickThinking, getInsightView, decideCorrection, initializeThinking, jobAction } from '../src/main/services/thinking-service'
 import { aiRead, aiWrite, jobs, reports, readThinkingState } from '../src/main/store/insight-store'
@@ -18,24 +19,26 @@ import type { WikiCorrection } from '../src/shared/insights'
 const usage={input:10,output:20,searches:0}
 const answer=(value:unknown)=>({text:JSON.stringify(value),usage})
 beforeEach(()=>{
+  process.env.FLOWNOTE_LOCAL_DATA=mkdtempSync(join(tmpdir(),'flownote-local-'))
   env.dir=mkdtempSync(join(tmpdir(),'flownote-thinking-'));mkdirSync(join(env.dir,'notes'))
-  env.generate.mockReset().mockResolvedValue(answer({body:'这个普通判断值得区分条件，而不是一概而论。',skip:false}))
+  env.generate.mockReset().mockResolvedValue(answer({body:'这个普通判断值得区分条件，而不是一概而论。',skip:false,fact_check:null,queries:[]}))
   env.search.mockReset();env.page.mockReset()
   initializeThinking(env.dir)
 })
-afterEach(()=>rmSync(env.dir,{recursive:true,force:true}))
+afterEach(()=>{rmSync(env.dir,{recursive:true,force:true});rmSync(process.env.FLOWNOTE_LOCAL_DATA!,{recursive:true,force:true});delete process.env.FLOWNOTE_LOCAL_DATA})
 describe('persistent thinking workflow',()=>{
   it('retries failed page reads without paying for completed searches again',async()=>{
     const id=saveNote(env.dir,'检验重要决策中的直觉')
-    env.generate.mockResolvedValue(answer({body:'一个有边界的解释',queries:['expert intuition evidence'],recommendations:[]}))
+    env.generate.mockResolvedValue(answer({body:'一个有边界的解释',queries:['expert intuition evidence'],candidates:[],recommendations:[]}))
     env.search.mockResolvedValue({sources:[{id:'public-source',title:'Evidence',url:'https://example.org/evidence',fetched_at:1,text:'',kind:'secondary'}],usage:{input:20,output:20,searches:1}})
     env.page.mockRejectedValue(new Error('读取网页超时'))
     const job=enqueue({kind:'note',id},'research');await tickThinking()
     expect(getInsightView({kind:'note',id}).insight?.sources[0].read_error).toBe('读取网页超时')
     expect(jobs(env.dir)[0].status).toBe('done')
     env.page.mockResolvedValue('这里是与所讨论观点直接相关的公开正文资料。')
+    const searchesBeforeRetry=env.search.mock.calls.length
     jobAction(job.id,'retry');await tickThinking()
-    expect(env.search).toHaveBeenCalledTimes(1)
+    expect(env.search).toHaveBeenCalledTimes(searchesBeforeRetry)
     expect(getInsightView({kind:'note',id}).insight?.sources[0].read_status).toBe('read')
     expect(getInsightView({kind:'note',id}).insight?.sources[0].read_error).toBeUndefined()
   })
@@ -81,6 +84,37 @@ describe('persistent thinking workflow',()=>{
     jobAction(job.id,'retry');await tickThinking()
     expect(reports(env.dir)).toHaveLength(1)
     expect(readThinkingState(env.dir)?.processed[id]).toBe(hashNoteInput('值得讨论的问题'))
+  })
+  it('delivers the internal Dream even when external research fails, and retries without rewriting it',async()=>{
+    saveNote(env.dir,'这段时期我对效率的看法发生了变化。')
+    env.generate.mockImplementation(async(_config,instruction)=>{
+      if(instruction.includes('Dream 像睡眠'))return {text:'过去的记录把效率放在首位；新的经历提示，还需要留意恢复与观察的价值。',usage}
+      throw new Error('external search preparation unavailable')
+    })
+    const job=enqueue({kind:'dream',id:'independent-core'},'dream');await tickThinking()
+    expect(jobs(env.dir).find(j=>j.id===job.id)?.status).toBe('done')
+    const core=reports(env.dir)[0]
+    expect(core.body).toContain('新的经历');expect(core.supplement_status).toBe('failed')
+    const coreCalls=env.generate.mock.calls.filter(call=>call[1].includes('Dream 像睡眠')).length
+    jobAction(job.id,'retry');await tickThinking()
+    expect(reports(env.dir)[0].body).toBe(core.body)
+    expect(env.generate.mock.calls.filter(call=>call[1].includes('Dream 像睡眠'))).toHaveLength(coreCalls)
+  })
+  it('continues a truncated Dream without discarding the completed section',async()=>{
+    saveNote(env.dir,'关于日常观察的记录。');let coreCalls=0
+    env.generate.mockImplementation(async(_config,instruction)=>{
+      if(instruction.includes('Dream 像睡眠')){
+        coreCalls++
+        if(coreCalls===1)throw new GenerationError('输出上限',usage,'第一部分是已完成的观察。','output_limit')
+        expect(instruction).toContain('从断点继续')
+        return {text:'第二部分补充新的理解。',usage}
+      }
+      throw new Error('external unavailable')
+    })
+    enqueue({kind:'dream',id:'continued-core'},'dream');await tickThinking()
+    expect(reports(env.dir)[0].body).toContain('第一部分是已完成的观察。')
+    expect(reports(env.dir)[0].body).toContain('第二部分补充新的理解。')
+    expect(coreCalls).toBe(2)
   })
   it('keeps a denied correction out of Wiki; an accepted one writes history exactly once',async()=>{
     const id=saveNote(env.dir,'待纠正的普通判断','学习')

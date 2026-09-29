@@ -5,10 +5,12 @@ import type { AiJob, Owner, InsightView, NoteInsight, DreamReport, SourceEvidenc
 import { EMPTY_USAGE } from '../../shared/insights'
 import { loadConfig } from '../store/config-store'
 import { loadAllNotesFrom, loadNote, hashNoteInput, getSyncDir } from '../store/note-store'
-import { aiRead, aiWrite, aiList, jobs, reports, insight, thread, ownerKey, readThinkingState, writeThinkingState } from '../store/insight-store'
+import { aiRead, aiWrite, aiCommit, aiList, jobs, reports, insight, thread, ownerKey, readThinkingState, writeThinkingState } from '../store/insight-store'
 import { getDreamableNotes, getNotesForDream, loadDreamState, saveDreamState, releaseDreamLock } from '../store/dream-store'
 import { generate, parseObject, BOUNDARY, GenerationError } from '../llm/thinking-client'
-import { searchDeepseek } from './deepseek-search'
+import { AI_LIMITS } from '../llm/models'
+import { searchDeepseek, parseSearch } from './deepseek-search'
+import { selectPassages } from './source-passages'
 import { readPublicPage } from './source-reader'
 import { validateRecommendations, sourceKind } from './evidence'
 import { readWikiAt, commitWiki, correctionAppendix, acceptedCorrections } from '../store/wiki-revision'
@@ -36,8 +38,13 @@ export function initializeThinking(dir: string): void {
     const known = Object.fromEntries(loadAllNotesFrom(dir).map(n => [n.id,hash(n)]))
     writeThinkingState(dir,{schema_version:1,known,processed:{...known},last_auto:0})
   }
-  for (const job of jobs(dir)) if (job.status === 'running') {
-    job.status = 'interrupted'; job.error = '上次运行被中断。已完成步骤会保留；重试可能重新调用未确认完成的请求。'; record(dir,job)
+  for (const job of jobs(dir)) {
+    const pending=aiRead<{pending:boolean}>(dir,'pending',job.owner.kind==='dream'?'reports_'+job.owner.id:'insights_'+ownerKey(job.owner))
+    if(pending?.pending && ['failed','running','interrupted'].includes(job.status)){
+      job.status='queued';job.phase='恢复待保存结果';job.error=undefined;record(dir,job)
+    }else if(job.status==='running'){
+      job.status='interrupted';job.error='结果未确认：上次请求被中断。已完成步骤保留，重试未确认的请求可能再次计费。';record(dir,job)
+    }
   }
   releaseDreamLock(false,dir)
 }
@@ -83,15 +90,23 @@ export function jobAction(id: string, action: 'cancel' | 'retry'): void {
   } else {
     if (job.status==='done' && ['research','dream'].includes(job.kind)) {
       const value = job.owner.kind==='dream' ? aiRead<DreamReport>(dir,'reports',job.owner.id) : insight(dir,job.owner)
-      if (value?.id!== (job.owner.kind==='dream'?job.owner.id:job.id) || !value.sources.some(s=>s.read_status==='failed')) return
+      if (value?.id!== (job.owner.kind==='dream'?job.owner.id:job.id) || (!value.sources.some(s=>s.read_status==='failed') && !(job.kind==='dream' && (value as DreamReport).supplement_status==='failed'))) return
       // Reuse successful search/model preparation and page reads. Only the final
       // synthesis must be regenerated after new evidence becomes available.
       delete job.steps['形成有依据的推荐']
       delete job.steps['核对观点归属']
+      for(const key of Object.keys(job.steps))if(/^(原始响应|格式修复) (形成有依据的推荐|核对观点归属|核对资料类型)$/.test(key))delete job.steps[key]
+      delete job.steps['核对资料类型']
     } else if (!['failed','interrupted','cancelled'].includes(job.status)) return
     if (job.owner.kind === 'note') {
       const note = loadNote(job.owner.id,dir)
       if (!note || hash(note) !== job.input_hash) throw new Error('笔记已变化，请基于当前版本重新发起')
+    }
+    for(const key of Object.keys(job.steps)){
+      const value=job.steps[key] as {error?:string}|undefined
+      if((key.startsWith('原始响应 ') && value?.error) || key.startsWith('格式修复 ')){
+        job.steps['历史响应_'+Date.now()+'_'+key]=value;delete job.steps[key]
+      }
     }
     job.status = 'queued'; job.error = undefined; job.phase = '等待重试'
   }
@@ -150,12 +165,35 @@ async function step<T>(dir: string, job: AiJob, name: string, signal: AbortSigna
 }
 async function ask(dir: string, job: AiJob, name: string, config: AppConfig, signal: AbortSignal, instruction: string, data: unknown, deep = false): Promise<Record<string,any>> {
   return step(dir,job,name,signal,async () => {
-    const result = await generate(config,BOUNDARY + '\n' + instruction,JSON.stringify(data),signal,deep).catch(error=>{
-      if(error instanceof GenerationError){sum(job.usage,error.usage);record(dir,job)}
-      throw error
-    })
-    sum(job.usage,result.usage); record(dir,job)
-    return parseObject(result.text)
+    async function response(key:string, prompt:string, input:string, thinking:boolean):Promise<{text:string;usage:Usage}> {
+      const cached = job.steps[key] as {text:string;usage:Usage;error?:string} | undefined
+      if (cached) { if(cached.error)throw new Error(cached.error); return cached }
+      try {
+        const result=await generate(config,prompt,input,signal,thinking)
+        sum(job.usage,result.usage)
+        job.steps[key]=result;record(dir,job)
+        return result
+      } catch(error) {
+        if(error instanceof GenerationError){sum(job.usage,error.usage);job.steps[key]={text:error.rawText,usage:error.usage,error:error.message};record(dir,job)}
+        throw error
+      }
+    }
+    const result=await response('原始响应 '+name,BOUNDARY+'\n'+instruction,JSON.stringify(data),deep)
+    const validate=(text:string):Record<string,any>=>{
+      const parsed=parseObject(text)
+      if(parsed.repair_failed)throw new Error('响应无法安全修复')
+      // Required top-level fields come from the explicitly specified output schema.
+      const schema=/返回(?:相同格式)?\s*JSON\s*(\{[\s\S]*)/.exec(instruction)?.[1]
+      const required=schema ? [...schema.matchAll(/(?:^\{|,)\s*"(body|recommendations|queries|candidates|skip|fact_check|correction)"\s*:/g)].map(m=>m[1]) : []
+      if(required.some(key=>!(key in parsed)))throw new Error('模型响应格式错误：缺少必要字段')
+      if('body' in parsed && typeof parsed.body!=='string')throw new Error('模型响应格式错误：正文不是文本')
+      if('recommendations' in parsed && !Array.isArray(parsed.recommendations))throw new Error('模型响应格式错误：推荐不是列表')
+      return parsed
+    }
+    try{return validate(result.text)}catch(error){
+      const repaired=await response('格式修复 '+name,BOUNDARY+'只修复所附响应的 JSON 格式。不得新增事实、续写截断内容或补造缺失字段。无法恢复则返回 {"repair_failed":true}。原输出要求：'+instruction,result.text,false)
+      try{return validate(repaired.text)}catch{throw new Error('模型响应格式错误：一次格式修复未成功；原始响应已保留。'+String(error))}
+    }
   })
 }
 const clean = (value: unknown, limit = 12000): string => typeof value === 'string' ? value.trim().slice(0,limit) : ''
@@ -187,39 +225,52 @@ async function material(dir: string, job: AiJob, config: AppConfig, signal: Abor
       coverage:'范围内 '+total+' 条，选取 '+selected.length+' 条；'+(clipped ? clipped+' 条长笔记仅覆盖前 '+perNote+' 字。' : '选取笔记全文已纳入。')+(text.length>16000 ? '长材料已分段摘要。' : '')}
   })
 }
-async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: AbortSignal, queries: string[], maxPages = 6): Promise<{sources:SourceEvidence[];warning:string}> {
+async function searched(dir:string,job:AiJob,config:AppConfig,query:string,signal:AbortSignal):Promise<ReturnType<typeof parseSearch>> {
+  const id=job.id+'_'+hashNoteInput(query)
+  const saved=aiRead<{data:any}>(dir,'responses',id)
+  if(saved)return parseSearch(saved.data)
+  let accounted=false
+  const result=await searchDeepseek(config.api_key,query,signal,data=>{
+    aiWrite(dir,'responses',id,{at:Date.now(),step:job.phase,data})
+    sum(job.usage,{input:data.usage?.input_tokens || 0,output:data.usage?.output_tokens || 0,searches:data.usage?.server_tool_use?.web_search_requests || 0})
+    accounted=true;record(dir,job)
+  })
+  if(!accounted)sum(job.usage,result.usage)
+  return result
+}
+async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: AbortSignal, queries: string[], maxPages: number = AI_LIMITS.pages): Promise<{sources:SourceEvidence[];warning:string}> {
   const sources = new Map<string,SourceEvidence>(); const errors: string[] = []
   const ranks = new Map<string,number>()
   if (config.api_provider !== 'DeepSeek') return {sources:[],warning:'当前提供商尚未接入联网核查，以下观点未核实'}
-  for (let i=0;i<Math.min(3,queries.length);i++) {
-    if (job.usage.searches>=6 && !Object.prototype.hasOwnProperty.call(job.steps,'搜索 '+i)) {
-      errors.push('本次服务端搜索用量已达到限制');break
-    }
+  for (let i=0;i<Math.min(AI_LIMITS.searchCalls-2,queries.length);i++) {
     const query = queries[i].trim().slice(0,600); if (!query) continue
     try {
       const result = await step(dir,job,'搜索 '+i,signal,async () => {
         const key = hashNoteInput(query)
         const cached = aiRead<{at:number;sources:SourceEvidence[]}>(dir,'search-cache',key)
         if (cached && Date.now()-cached.at < 7*86400000) return cached.sources
-        const found = await searchDeepseek(config.api_key,query,signal)
-        sum(job.usage,found.usage)
+        const found = await searched(dir,job,config,query,signal)
         aiWrite(dir,'search-cache',key,{at:Date.now(),sources:found.sources})
         return found.sources
       })
       result.forEach((s,index) => {sources.set(s.id,s);ranks.set(s.id,Math.min(ranks.get(s.id)??Infinity,index))})
     } catch (e) { signal.throwIfAborted(); errors.push(String(e)) }
   }
-  let read = 0
-  const score = (s:SourceEvidence):number => (sourceKind(s.url)==='primary'?-100:0)+(ranks.get(s.id)??12)+(/\.pdf(?:$|\?)|\/doi\/pdf\//i.test(s.url)?100:0)
+  let read = 0, successes = 0
+  const score = (s:SourceEvidence):number => (sourceKind(s.url)==='primary'?-100:0)+(ranks.get(s.id)??12)
   const ranked = [...sources.values()].sort((a,b) => score(a)-score(b))
+  let alternativesSearched=false
   for (const source of ranked) {
-    source.kind = sourceKind(source.url)
+    source.kind = 'unknown'
+    source.document_type='unknown'
     source.read_status = 'not_attempted'
-    if (/\.(pdf|docx?|pptx?|xlsx?)(?:$|[?#])|\/doi\/pdf\//i.test(source.url)) {
+    if (/\.(docx?|pptx?|xlsx?)(?:$|[?#])/i.test(source.url)) {
       source.read_error='这是文档下载链接；当前仅核查公开网页正文';continue
     }
-    if (read >= maxPages) continue
-    read++
+    const pageCache=aiRead<{at:number}>(dir,'page-cache',source.id)
+    const cached=Object.prototype.hasOwnProperty.call(job.steps,'读取来源 '+source.id) || (pageCache && Date.now()-pageCache.at<86400000)
+    if ((!cached && read >= AI_LIMITS.fetchAttempts) || successes >= maxPages) continue
+    if(!cached)read++
     try {
       source.text = await step(dir,job,'读取来源 '+source.id,signal,async () => {
         const cached = aiRead<{at:number;text:string}>(dir,'page-cache',source.id)
@@ -228,12 +279,28 @@ async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: Abor
         aiWrite(dir,'page-cache',source.id,{at:Date.now(),text}); return text
       })
       if (!source.text.trim()) throw new Error('页面未提供可提取的正文')
-      source.read_status = 'read'
+      source.format=source.text.startsWith('[PDF')?'pdf':source.text.startsWith('[公开 XML')?'xml':'html'
+      source.coverage=source.format==='pdf'?source.text.split('\n')[0]:source.format==='xml'?'公开 XML 正文，最多前 100000 字':'静态网页提取，最多前 24000 字；不代表完整全文'
+      if(source.format==='xml'){source.document_type='paper';source.kind='primary'}
+      source.read_status = source.text.startsWith('[仅摘要')?'abstract':'read'
+      if(source.read_status==='read')successes++
+      else source.coverage='仅取得论文摘要，未读取全文'
       delete source.read_error
     } catch (e) {
       signal.throwIfAborted()
       source.read_status = 'failed'
       source.read_error = e instanceof Error ? e.message : String(e)
+    }
+    if(source===ranked[ranked.length-1] && successes<3 && !alternativesSearched && read<AI_LIMITS.fetchAttempts){
+      alternativesSearched=true
+      const failed=ranked.filter(s=>s.read_status==='failed' || s.read_status==='abstract').slice(0,2)
+      for(let i=0;i<failed.length;i++)try{
+        const result=await step(dir,job,'查找公开替代版本 '+i,signal,async()=>{
+          const found=await searched(dir,job,config,failed[i].title.slice(0,250)+' open access full text author manuscript repository PMC',signal)
+          return found.sources
+        })
+        for(const item of result)if(!sources.has(item.id)){sources.set(item.id,item);ranked.push(item)}
+      }catch(error){signal.throwIfAborted();errors.push(String(error))}
     }
   }
   return {sources:[...sources.values()],warning:errors.length ? '部分联网核查未完成。' : sources.size && ![...sources.values()].some(s => s.text) ? '仅取得检索来源，未读取到正文；观点归属尚未核实。' : ''}
@@ -244,24 +311,38 @@ async function research(dir: string, job: AiJob, config: AppConfig, signal: Abor
     .filter(r => r.feedback === 'read' || r.feedback === 'irrelevant').slice(-20)
     .map(r => ({title:r.title,idea:r.idea,feedback:r.feedback}))
   const plan = await ask(dir,job,'选择值得展开的问题',config,signal,
-    '选择最多三个值得展开的问题。先给暂定判断，再给依据、不同解释和边界。必要时建议行动，不强行统一主题。优先找对当前具体判断有帮助的书籍观点，允许论文、访谈。外文书必须提供候选原文书名和作者原名，供后续核查；不要把猜测的中译本当成已核实书目。返回 JSON {"body":"深入分析，不含书籍引文","candidates":[{"title":"候选书/资料","author":"","original_title":"原文书名","original_author":"作者原名","idea":"待核查观点"}],"queries":["抽象议题或书名作者观点核查词，禁止包含用户身份或私事，最多三条"]}。没有有益候选可为空。', {notes:text,avoid_repeating:prior},true)
+    '选择最多三个值得展开的问题。先给暂定判断，再给依据、不同解释和边界。必要时建议行动，不强行统一主题。优先找对当前具体判断有帮助的书籍观点，允许论文、访谈。外文书必须提供候选原文书名和作者原名，供后续核查；不要把猜测的中译本当成已核实书目。返回 JSON {"body":"深入分析，不含书籍引文","candidates":[{"title":"候选书/资料","author":"","original_title":"原文书名","original_author":"作者原名","idea":"待核查观点"}],"queries":["抽象议题或书名作者观点核查词，禁止包含用户身份或私事，最多六条"]}。没有有益候选可为空。', {notes:text,avoid_repeating:prior},true)
   const queries = Array.isArray(plan.queries) ? plan.queries.filter((x:unknown) => typeof x === 'string') : []
   // Candidate books must actually be searched: broad topic queries alone tend
   // to return loosely related papers and cannot establish book attribution.
   const bookQueries = (Array.isArray(plan.candidates)?plan.candidates:[]).slice(0,2)
     .filter((c:any)=>clean(c.title)&&clean(c.author))
-    .map((c:any)=>[clean(c.original_title)||clean(c.title),clean(c.original_author)||clean(c.author),'publisher book overview'].join(' '))
-  const found = await retrieve(dir,job,config,signal,[...bookQueries,...queries].slice(0,3))
-  const result = await ask(dir,job,'形成有依据的推荐',config,signal,
-    '基于材料筛选最多三项有益推荐，没有合适项就为空。只把资料直接支持的内容归于作者。AI的联系与推论标为 extension。来源仅标题/搜索摘要时不算正文证据。不得从著名书籍推断任意观点、编造引文或页码。未核实时不提供章节页码或直接引文；中译本未经来源确认应写尚未核实。支持片段必须逐字摘自给定 source.text，且直接支持 idea。返回 JSON {"body":"深入分析，不能虚构外部事实或出处","recommendations":[{"title":"","author":"","original_title":"","translation":"","question":"对应笔记的具体问题","idea":"","relevance":"如何改变理解","limits":"","reading":"","attribution":"author 或 extension","identity_source_ids":[],"support":[{"source_id":"","excerpt":"","supports_claim":true}]}]}。',
-    {notes:text,analysis:plan,sources:found.sources.map(s => ({...s,text:s.text.slice(0,9000)}))},true)
+    .map((c:any)=>[clean(c.original_title)||clean(c.title),clean(c.original_author)||clean(c.author),'book review rating Goodreads 豆瓣'].join(' '))
+  const found = await retrieve(dir,job,config,signal,[...bookQueries,...queries].slice(0,6))
+  const supplied=aiRead<SourceEvidence[]>(dir,'provided-sources',ownerKey(job.owner)) || []
+  found.sources=[...supplied,...found.sources.filter(s=>!supplied.some(p=>p.id===s.id))].slice(0,72)
+  const passages=new Map(found.sources.map(source=>[source.id,selectPassages(source,queries)]))
+  for(const source of found.sources)source.coverage=(source.coverage || '取得静态正文')+'；本次选读 '+(source.analysis_ranges?.length||0)+' 段、最多 9000 字，非全文逐字审读'
+  const classification=await ask(dir,job,'核对资料类型',config,signal,
+    '按文档本身而非域名分类。返回 JSON {"sources":[{"id":"","document_type":"author/publisher/paper/review/repost/unknown","excerpt":"直接证明文档性质、署名、研究方法或专业书评出处的原文片段"}]}。不能把一般转载、书商介绍、用户短评当成专业评论，无法判断用unknown。',
+    found.sources.filter(s=>s.text).map(s=>({id:s.id,url:s.url,text:s.text.slice(0,12000)})))
+  for(const item of Array.isArray(classification.sources)?classification.sources:[]){
+    const source=found.sources.find(s=>s.id===item.id)
+    if(!source || typeof item.excerpt!=='string' || item.excerpt.length<20 || !source.text.includes(item.excerpt))continue
+    if(!['author','publisher','paper','review','repost','unknown'].includes(item.document_type))continue
+    source.document_type=item.document_type
+    source.kind=['author','publisher','paper'].includes(item.document_type)?'primary':item.document_type==='review'?'secondary':'unknown'
+  }
+  const result = await ask(dir,job,'形成有依据的推荐' ,config,signal,
+    '每项添加 material_type（book/paper/article）。书籍必须添加 quality，含kind（rating/professional_review）、source_id、excerpt（评分及人数或专业书评逐字依据）、edition、reason；评分另含score、count。豆瓣>=8且>=100人，或Goodreads>=4且>=200人；不混版本、不补数字。无评分可用可靠专业书评，出版社广告不能代替。无质量依据的书不推荐。论文说明对象、方法、发表状态和局限，不以引用次数断言正确。基于材料筛选最多三项有益推荐，没有合适项就为空。只把资料直接支持的内容归于作者。AI的联系与推论标为 extension。来源仅标题/搜索摘要时不算正文证据。不得从著名书籍推断任意观点、编造引文或页码。未核实时不提供章节页码或直接引文；中译本未经来源确认应写尚未核实。支持片段必须逐字摘自给定 source.text，且直接支持 idea。返回 JSON {"body":"深入分析，不能虚构外部事实或出处","recommendations":[{"title":"","author":"","original_title":"","translation":"","question":"对应笔记的具体问题","idea":"","relevance":"如何改变理解","limits":"","reading":"","attribution":"author 或 extension","identity_source_ids":[],"support":[{"source_id":"","excerpt":"","supports_claim":true}]}]}。',
+    {notes:text,analysis:plan,sources:found.sources.map(s => ({...s,text:passages.get(s.id)||''}))},true)
   // A second, evidence-only pass checks attribution rather than trusting the drafting pass.
   let recommendations: NoteInsight['recommendations'] = []
   if (Array.isArray(result.recommendations) && result.recommendations.length) {
     const checked = await ask(dir,job,'核对观点归属',config,signal,
-      '逐项审计候选推荐。只有正文真正支持具体 idea 时保留 support；仅相关、同名、书商广告、AI延伸推断不能证明作者观点。保留有益但未核实的推荐时清空 support。删除编造的引文、章节、页码和中译本信息。返回相同格式 JSON {"recommendations": [...]}。不得新增来源或推荐。',
-      {recommendations:result.recommendations,sources:found.sources.map(s => ({...s,text:s.text.slice(0,9000)}))})
-    recommendations = validateRecommendations(checked.recommendations,found.sources)
+      '逐项审计候选推荐。只有正文真正支持具体 idea 时保留 support；仅相关、同名、书商广告、AI延伸推断不能证明作者观点。保留有益但未核实的推荐时清空 support。删除编造的引文、章节、页码和中译本信息。返回相同格式 JSON {"recommendations": [...]}。不得新增来源或推荐。必须保留 material_type 与 quality 字段并核对其原文依据；缺失评分不能补数。',
+      {recommendations:result.recommendations,sources:found.sources.map(s => ({...s,text:passages.get(s.id)||''}))})
+    recommendations = validateRecommendations(Array.isArray(checked.recommendations)?checked.recommendations.filter((r:any)=>['book','paper','article'].includes(r.material_type)):[],found.sources)
   }
   const body = clean(result.body) || clean(plan.body)
   if (!body) throw new Error('未生成可用分析')
@@ -361,7 +442,7 @@ async function execute(dir: string, job: AiJob, config: AppConfig, signal: Abort
     check(dir,job,signal)
     discussion.messages.push({id:job.id+'_question',role:'user',text:job.prompt!,created_at:job.created_at,input_hash:job.input_hash},
       {id:job.id+'_answer',role:'assistant',text:answer,created_at:Date.now(),input_hash:job.input_hash,sources:replySources,usage:job.usage})
-    aiWrite(dir,'threads',ownerKey(owner),discussion); return
+    await aiCommit(dir,'threads',ownerKey(owner),discussion); return
   }
   const input = await material(dir,job,config,signal)
   if (job.kind === 'comment') {
@@ -382,35 +463,70 @@ async function execute(dir: string, job: AiJob, config: AppConfig, signal: Abort
     const value: NoteInsight = {schema_version:1,id:job.id,owner:job.owner,input_hash:job.input_hash,created_at:Date.now(),
       body,skipped:result.skip === true,recommendations:old?.input_hash === job.input_hash ? old.recommendations : [],
       sources:[...new Map([...(old?.input_hash===job.input_hash?old.sources:[]),...found.sources].map(s=>[s.id,s])).values()],warning:found.warning,usage:job.usage}
-    aiWrite(dir,'insights',ownerKey(job.owner),value)
+    await aiCommit(dir,'insights',ownerKey(job.owner),value)
+  } else if(job.kind==='dream') {
+    const body=await step(dir,job,'睡眠整理正文',signal,async()=>{
+      const rawKey='原始响应 睡眠整理正文'
+      let response=job.steps[rawKey] as {text:string;usage:Usage}|undefined
+      if(!response){
+        const segments=(job.steps['Dream 已完成片段'] as string[] | undefined) || []
+        for(let attempt=0;attempt<2 && !response;attempt++){
+        try{
+          response=await generate(config,BOUNDARY.replace('输出简体中文 JSON，字段内可以有 Markdown。','输出简体中文 Markdown 文章，不使用 JSON。')+
+            'Dream 像睡眠中的大脑，重新组织和反思这一时期接收的信息。写一篇连贯反思文章，通常800–1600字，材料少则更短，最多三个主要展开方向。梳理重复关注、观点变化、经历和判断的联系、尚未消化的问题。联系必须有材料依据，不强行统一主题。给出有理由的暂定解释和回答、不同理解及边界，而非只批评提问或行动清单。日常经历与普通判断同样重要，纯提醒可略过。区分用户原话和AI推断。关键判断用 [笔记标题](#note-ID) 引用所给真实ID。资料覆盖多个日期，不称为今天。不引入尚未核实的外部书籍或论文。'+(segments.length?'已有部分正文已保存，只从断点继续完成未写完的部分，不重复已有段落。':''),segments.length?JSON.stringify({notes:input.text,completed_tail:segments.join('\n').slice(-6000)}):input.text,signal,true,'markdown')
+          sum(job.usage,response.usage);job.steps[rawKey]=response;record(dir,job)
+        }catch(error){
+          if(error instanceof GenerationError){
+            sum(job.usage,error.usage);job.steps['截断响应 睡眠整理正文']={text:error.rawText,usage:error.usage}
+            if(error.reason==='output_limit' && error.rawText.trim()){
+              segments.push(error.rawText);job.steps['Dream 已完成片段']=segments;record(dir,job)
+              if(attempt===0)continue
+            }else record(dir,job)
+          }
+          throw error
+        }
+        }
+        if(response && segments.length){response={...response,text:segments.join('\n')+'\n'+response.text};job.steps[rawKey]=response;record(dir,job)}
+      }
+      if(!response)throw new Error('Dream 正文尚未完整，已保留已完成片段')
+      if(!response.text.trim())throw new Error('未生成可用反思正文')
+      return response.text
+    })
+    const existing=aiRead<DreamReport>(dir,'reports',job.owner.id)
+    const report:DreamReport=existing || {schema_version:1,id:job.owner.id,created_at:Date.now(),body,notes:input.notes,coverage:input.coverage,recommendations:[],sources:[],usage:job.usage,supplement_status:'pending'}
+    await step(dir,job,'保存内部整理',signal,async()=>{await aiCommit(dir,'reports',report.id,report);notify();return true})
+    const state=readThinkingState(dir)!
+    input.notes.forEach(n=>{state.processed[n.id]=n.hash})
+    if(job.automatic)state.last_auto=Date.now()
+    writeThinkingState(dir,state)
+    try {
+      const result=await research(dir,job,config,signal,body+'\n\n材料依据：\n'+input.text)
+      report.supplement_body=result.body;report.recommendations=result.recommendations;report.sources=result.sources
+      report.warning=result.warning;report.supplement_status=result.warning?'failed':'complete'
+    }catch(error){
+      signal.throwIfAborted();check(dir,job,signal)
+      report.supplement_status='failed';report.warning='内部整理已完成；外部补充未完成，可单独重试。'+clean(String(error),300)
+    }
+    check(dir,job,signal);report.usage=job.usage
+    await aiCommit(dir,'reports',report.id,report)
+    releaseDreamLock(true,dir);notify('dream:finished',report.id)
   } else {
     const result = await research(dir,job,config,signal,input.text)
     check(dir,job,signal)
-    if (job.kind === 'dream') {
-      const report: DreamReport = {schema_version:1,id:job.owner.id,created_at:Date.now(),...result,notes:input.notes,coverage:input.coverage,usage:job.usage}
-      aiWrite(dir,'reports',report.id,report)
-      const state = readThinkingState(dir)!
-      input.notes.forEach(n => { state.processed[n.id]=n.hash })
-      if (job.automatic) state.last_auto=Date.now()
-      writeThinkingState(dir,state); releaseDreamLock(true,dir)
-      notify('dream:finished',report.id)
-    } else {
-      const old = insight(dir,job.owner)
-      aiWrite(dir,'insights',ownerKey(job.owner),{
-        schema_version:1,id:job.id,owner:job.owner,input_hash:job.input_hash,created_at:Date.now(),
-        ...result,body:result.body,skipped:false,feedback:old?.feedback,usage:job.usage
-      } satisfies NoteInsight)
-    }
+    const old = insight(dir,job.owner)
+    await aiCommit(dir,'insights',ownerKey(job.owner),{
+      schema_version:1,id:job.id,owner:job.owner,input_hash:job.input_hash,created_at:Date.now(),
+      ...result,body:result.body,skipped:false,feedback:old?.feedback,usage:job.usage
+    } satisfies NoteInsight)
   }
 }
 export async function tickThinking(): Promise<void> {
-  if (pumping) return
   const config = loadConfig(); const dir = config.sync_dir
   if (library !== dir) {
     active.forEach(c=>c.abort());library=dir
     if (dir) initializeThinking(dir)
   }
-  if (!dir) return
+  if (pumping || !dir) return
   const state = readThinkingState(dir)!
   let changed = false
   for (const note of loadAllNotesFrom(dir)) {
@@ -436,9 +552,9 @@ export async function tickThinking(): Promise<void> {
   if (!job) return
   pumping=true
   const controller = new AbortController(); active.set(job.id,controller)
-  job.status='running';record(dir,job)
-  if (job.kind === 'dream') saveDreamState({...loadDreamState(dir),dream_in_progress:true},dir)
   try {
+    job.status='running';record(dir,job)
+    if (job.kind === 'dream') saveDreamState({...loadDreamState(dir),dream_in_progress:true},dir)
     await execute(dir,job,config,controller.signal)
     check(dir,job,controller.signal)
     job.status='done';job.phase='完成'
@@ -447,8 +563,10 @@ export async function tickThinking(): Promise<void> {
     job.error = clean(String(error),500);job.phase='未完成'
     if (job.kind==='dream') notify('dream:error',job.error)
   } finally {
-    if (job.kind==='dream') releaseDreamLock(false,dir)
-    record(dir,job);active.delete(job.id);pumping=false
+    try {
+      try { if (job.kind==='dream') releaseDreamLock(false,dir) }
+      finally { record(dir,job) }
+    } finally { active.delete(job.id);pumping=false }
   }
 }
 export function startThinkingService(): void {

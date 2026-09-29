@@ -29,8 +29,9 @@ async function poll(check){
  throw new Error('Timed out waiting for completed application state')
 }
 async function launch(){
- const instance=await electron.launch({executablePath:require('electron'),args:[root,'--remote-debugging-port=9228'],env:{...process.env,FLOWNOTE_CONFIG_PATH:configPath,ELECTRON_RENDERER_URL:'http://127.0.0.1:5189'}})
+ const instance=await electron.launch({executablePath:require('electron'),args:[root,'--remote-debugging-port=9228'],env:{...process.env,FLOWNOTE_LOCAL_DATA:join(run,'local'),FLOWNOTE_CONFIG_PATH:configPath,ELECTRON_RENDERER_URL:'http://127.0.0.1:5189'}})
  const page=await instance.firstWindow()
+ await instance.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setBounds({width:1440,height:900}))
  page.on('pageerror',e=>errors.push(String(e)))
  await page.getByRole('button',{name:'记录与笔记',exact:true}).waitFor()
  return {instance,page}
@@ -47,11 +48,13 @@ async function mockModel(instance){
     return new Response(JSON.stringify({choices:[{message:{content:'# 学习\n\n## 测试普通观点\n\n新记录已归入 Wiki。'}}]}),{status:200})
    }else if(instruction.includes('定位需修正')){
     data={before:[]}
+   }else if(instruction.includes('Dream 像睡眠')){
+    return new Response(JSON.stringify({choices:[{message:{content:'这段时期的记录显示，你在尝试区分直接经验和一般判断。重新组织这些信息时，值得保留经验本身，同时检查结论的适用条件。'}}],usage:{prompt_tokens:50,completion_tokens:60}}),{status:200})
    }else if(instruction.includes('选择最多三个')){
     data={body:'应区分暂定判断和已经确认的事实。',queries:[],candidates:[]}
    }else if(instruction.includes('基于材料筛选')){
     data={body:'这次记录提示了一个值得思考的问题：如何检验自己的日常判断？先提出可检验的条件，再寻找反例。',recommendations:[]}
-   }else if(instruction.includes('判断')&&instruction.includes('追问')){
+   }else if(instruction.includes('直接回答追问')){
     data={body:'可以先看这个判断适用于哪些条件，再用资料核对，而不是直接把经验泛化。',queries:[]}
    }else{
     data={body:'这条日常判断值得补充适用条件。先区分个人经验与一般规律，再判断是否有足够证据。',skip:false,fact_check:null}
@@ -64,14 +67,17 @@ try{
  let start=await launch();app=start.instance;let page=start.page
  console.log('Loaded development window; checking save and AI flow')
  // Real UI → real IPC → real disk, initially with no API key.
+ await page.locator('.note-editor').waitFor()
+ await page.locator('.library-heading').getByRole('button',{name:'新建笔记',exact:true}).click()
  const input=page.locator('textarea.quick-input')
  await input.fill('一般观点端到端测试：记录应该立即可见。')
  await input.press('Alt+Enter')
- await page.getByRole('button',{name:'查看笔记',exact:true}).waitFor()
+ await page.getByText('笔记已保存',{exact:true}).waitFor()
  const saved=JSON.parse(readFileSync(join(dir,'notes',readdirSync(join(dir,'notes')).filter(x=>!x.startsWith('177821')).at(0)),'utf8'))
  assert.equal(saved.raw_content,'一般观点端到端测试：记录应该立即可见。')
  assert.equal(saved.id.length,13)
- assert.match(await page.locator('.note-card').first().innerText(),/一般观点端到端测试/)
+ await page.getByRole('button',{name:'有更新',exact:true}).click()
+ assert.match(await page.locator('.workspace-note').first().textContent(),/一般观点端到端测试/)
  await page.getByRole('searchbox',{name:'搜索笔记'}).fill('不存在的筛选')
  await page.getByRole('button',{name:'查看笔记',exact:true}).click()
  await page.locator('#note-'+saved.id).waitFor()
@@ -79,8 +85,8 @@ try{
  await page.evaluate(async()=>{const cfg=await window.api.config.load();await window.api.config.save({...cfg,api_key:'test-fixture'});await window.api.classifier.poke()})
  await poll(()=>page.evaluate(async(id)=>(await window.api.notes.loadAll()).find(n=>n.id===id)?.ai_status==='done',saved.id))
  await poll(()=>page.evaluate(async(id)=>(await window.api.thinking.view({kind:'note',id})).insight?.body.length>0,saved.id))
- await page.locator('#note-'+saved.id).getByRole('button',{name:'AI 回应与讨论',exact:true}).click()
- const panel=page.getByRole('dialog',{name:'笔记的回应与延伸阅读'}).getByRole('region',{name:'AI 评论与讨论'})
+ await page.getByRole('button',{name:'AI 思考',exact:true}).click()
+ const panel=page.getByRole('region',{name:'AI 评论与讨论'})
  await panel.getByRole('tab',{name:'继续讨论',exact:true}).click()
  await panel.getByRole('textbox',{name:'继续追问'}).fill('如何核对？')
  await panel.getByRole('button',{name:'发送',exact:true}).click()
@@ -92,17 +98,17 @@ try{
  mkdirSync(join(dir,'thinking','corrections'),{recursive:true})
  writeFileSync(join(dir,'thinking','corrections',correction.id+'.json'),JSON.stringify(correction))
  await page.reload()
- await page.locator('#note-'+saved.id).getByRole('button',{name:'AI 回应与讨论',exact:true}).click()
- await page.getByRole('dialog').getByRole('button',{name:'接纳并融入 Wiki'}).click()
+ await page.getByRole('button',{name:'AI 思考',exact:true}).click()
+ await page.getByRole('button',{name:'接纳并融入 Wiki'}).click()
  await poll(()=>page.evaluate(async(id)=>(await window.api.thinking.view({kind:'note',id})).corrections.some(c=>c.status==='applied'),saved.id))
  const applied=JSON.parse(readFileSync(join(dir,'thinking','corrections',correction.id+'.json'),'utf8'))
  assert.match(readFileSync(join(dir,'wikis',applied.wiki_file),'utf8'),/测试用已接纳修正/)
  await page.screenshot({path:join(run,'notes.png'),fullPage:true})
- await page.getByRole('button',{name:'关闭思考窗口'}).click()
+ await page.getByRole('button',{name:'关闭思考面板'}).click()
  await page.getByRole('button',{name:'Dream',exact:true}).click()
  await page.getByRole('button',{name:'开始 Dream',exact:true}).click()
  await poll(()=>page.evaluate(async()=>(await window.api.thinking.reports()).length>0))
- await page.getByText('这次记录提示了一个值得思考的问题',{exact:false}).waitFor()
+ await page.getByRole('region',{name:'Dream 分析与讨论'}).waitFor()
  await page.screenshot({path:join(run,'dream.png'),fullPage:true})
  await app.close();app=undefined
  // Restart with no paid provider and verify the saved note, correction and conversation.
@@ -116,9 +122,9 @@ try{
  // Mixed tag + text search runs in the real renderer against saved notes.
  await page.getByRole('searchbox',{name:'搜索笔记'}).fill('#验证 一般观点')
  await page.locator('#note-'+saved.id).waitFor()
- assert.equal(await page.locator('.note-card').count(),1)
+ assert.equal(await page.locator('.workspace-note').count(),1)
  await page.getByRole('searchbox',{name:'搜索笔记'}).fill('#不存在 一般观点')
- await poll(async()=>await page.locator('.note-card').count()===0)
+ await poll(async()=>await page.locator('.workspace-note').count()===0)
  await page.getByRole('searchbox',{name:'搜索笔记'}).fill('')
  await page.locator('#note-'+saved.id).waitFor()
  assert.deepEqual(errors,[])

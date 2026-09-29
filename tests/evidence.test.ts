@@ -29,6 +29,16 @@ describe('evidence boundaries',()=>{
     expect(rec.evidence).toBe('unverified');expect(rec.quote).toBeUndefined()
     expect(rec.reading).not.toContain('999')
   })
+  it('requires real rating evidence and never treats an unknown source as reliable secondary evidence',()=>{
+    const source:SourceEvidence={id:'rating',url:'https://www.goodreads.com/book/show/test',title:'Book',text:'Book by Author has a rating of 4.2 from 250 ratings for the 2024 edition.',kind:'unknown',fetched_at:123}
+    const base={title:'Book',author:'Author',idea:'A specific idea',relevance:'A relevant contribution',question:'A specific question',material_type:'book'}
+    expect(validateRecommendations([base],[source])).toEqual([])
+    const quality={kind:'rating',source_id:'rating',excerpt:source.text,score:4.2,count:250,edition:'2024',reason:'读者评价'}
+    const rec=validateRecommendations([{...base,quality,support:[{source_id:'rating',excerpt:source.text,supports_claim:true}]}],[source])[0]
+    expect(rec.quality?.score).toBe(4.2);expect(rec.evidence).toBe('unverified')
+    expect(validateRecommendations([{...base,quality:{...quality,count:999}}],[source])).toEqual([])
+    expect(validateRecommendations([{...base,quality:{...quality,score:3.2}}],[source])).toEqual([])
+  })
   it('sorts a real new timestamp ahead of legacy long identifiers without migrating IDs',()=>{
     const old={id:'1778215309498000',created_at:'2026-05-08'}
     const recent={id:'1778215309498001',created_at:'2026-09-23',created_at_ms:1790137215327}

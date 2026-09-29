@@ -15,7 +15,7 @@ const TOOLS: typeof PRIMARY = [
   { id: 'settings', label: '设置', mark: 'settings' }
 ]
 
-export default function Sidebar(): JSX.Element {
+export default function Sidebar({onCollapse}:{onCollapse?:()=>void}): JSX.Element {
   const { pageId, setPageId } = useApp()
   const renderItems = (items: typeof PRIMARY): JSX.Element[] => items.map((item) => (
     <li key={item.id}>
@@ -24,6 +24,7 @@ export default function Sidebar(): JSX.Element {
         className={`sidebar-nav-item${pageId === item.id ? ' active' : ''}`}
         onClick={() => setPageId(item.id)}
         title={item.label}
+        aria-label={item.label}
         aria-current={pageId === item.id ? 'page' : undefined}
       >
         <span className="sidebar-nav-mark" aria-hidden="true"><Icon name={item.mark}/></span>
@@ -35,6 +36,7 @@ export default function Sidebar(): JSX.Element {
     <aside className="sidebar" aria-label="主导航">
       <div className="sidebar-header">
         <div className="sidebar-title">FlowNote</div>
+        <button className="navigation-collapse" aria-label="收起导航" title="收起导航" onClick={onCollapse}>‹</button>
         <div className="sidebar-subtitle">个人笔记与思考</div>
       </div>
       <nav className="sidebar-nav-wrap">

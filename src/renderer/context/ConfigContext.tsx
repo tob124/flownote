@@ -1,3 +1,4 @@
+import { mayLeave } from '../utils/workspace'
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import type { AppConfig } from '../../shared/types'
 import { DEFAULT_CATEGORIES } from '../../shared/types'
@@ -42,9 +43,10 @@ export function ConfigProvider({ children }: { children: ReactNode }): JSX.Eleme
   }, [])
 
   const save = useCallback(async (cfg: AppConfig) => {
+    if(cfg.sync_dir !== config.sync_dir && !mayLeave()) throw new Error('请先保存当前草稿')
     await window.api.config.save(cfg)
     setConfig(cfg)
-  }, [])
+  }, [config.sync_dir])
 
   useEffect(() => {
     void load()

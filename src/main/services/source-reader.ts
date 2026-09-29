@@ -3,6 +3,8 @@ import { BlockList, isIP } from 'net'
 import { request as httpRequest } from 'http'
 import { request as httpsRequest } from 'https'
 import { load } from 'cheerio'
+import { gunzipSync } from 'zlib'
+import { readPdf } from './pdf-reader'
 
 const blocked = new BlockList()
 for (const [address, prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.0.0.0',24],['192.168.0.0',16],['198.18.0.0',15],['224.0.0.0',4],['240.0.0.0',4]] as const) blocked.addSubnet(address, prefix, 'ipv4')
@@ -19,7 +21,13 @@ export function sourceUrl(raw: string): URL {
 // Resolve those through authenticated DNS-over-HTTPS, then pin the public IP.
 // Never allow the placeholder itself or relax private-address checks.
 export async function resolvePublicHost(host: string, signal: AbortSignal): Promise<string[]> {
-  let addresses = (await lookup(host,{all:true,family:4})).map(a=>a.address)
+  signal.throwIfAborted()
+  const resolved=await new Promise<Awaited<ReturnType<typeof lookup>>>((resolve,reject)=>{
+    const abort=():void=>reject(new Error('域名解析超时或已取消'))
+    signal.addEventListener('abort',abort,{once:true})
+    lookup(host,{all:true,family:4}).then(resolve as any,reject).finally(()=>signal.removeEventListener('abort',abort))
+  })
+  let addresses = (resolved as unknown as {address:string}[]).map(a=>a.address)
   if (addresses.length && addresses.every(a=>/^198\.(18|19)\./.test(a)) && !isIP(host)) {
     const response = await fetch('https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(host)+'&type=A', {
       headers:{Accept:'application/dns-json'}, signal:AbortSignal.any([signal,AbortSignal.timeout(8000)]), redirect:'error'
@@ -43,13 +51,14 @@ export async function readPublicPage(raw: string, signal: AbortSignal, redirects
   signal = AbortSignal.any([signal,AbortSignal.timeout(20000)])
   if (redirects > 3) throw new Error('网页重定向过多')
   const url = sourceUrl(raw)
+  if(url.hostname==='content.openalex.org' && process.env.FLOWNOTE_OPENALEX_KEY)url.searchParams.set('api_key',process.env.FLOWNOTE_OPENALEX_KEY)
   signal.throwIfAborted()
   const addresses = await resolvePublicHost(url.hostname,signal)
   signal.throwIfAborted()
   return new Promise<string>((resolve,reject) => {
     const transport = url.protocol === 'https:' ? httpsRequest : httpRequest
     const req = transport(url, {
-      signal, headers: { 'User-Agent': 'FlowNote/3.0 evidence reader', Accept: 'text/html,text/plain', 'Accept-Encoding': 'identity' },
+      signal, headers: { 'User-Agent': 'FlowNote/3.0 evidence reader', Accept: 'text/html,application/pdf,application/xml,text/xml,text/plain', 'Accept-Encoding': 'identity' },
       lookup: ((_host: unknown, options: any, cb: any) => options?.all ?
         cb(null, [{ address: addresses[0], family: 4 }]) : cb(null, addresses[0], 4)) as any
     }, res => {
@@ -58,17 +67,30 @@ export async function readPublicPage(raw: string, signal: AbortSignal, redirects
         readPublicPage(new URL(res.headers.location, url).href, signal, redirects + 1).then(resolve,reject)
         return
       }
-      if (res.statusCode !== 200 || !/text\/(html|plain)|application\/xhtml/.test(String(res.headers['content-type']))) {
+      if (res.statusCode !== 200 || !/text\/(html|plain|xml)|application\/(xhtml|xml|pdf)/.test(String(res.headers['content-type']))) {
         res.resume(); reject(new Error('网页未开放可读正文（HTTP '+res.statusCode+'）')); return
       }
       const chunks: Buffer[] = []; let bytes = 0
       res.on('data', chunk => {
         bytes += chunk.length
-        if (bytes > 2_000_000) { req.destroy(new Error('网页过大')); return }
+        if (bytes > 20_000_000) { req.destroy(new Error('网页过大')); return }
         chunks.push(Buffer.from(chunk))
       })
       res.on('error', reject)
-      res.on('end', () => resolve(extractText(Buffer.concat(chunks).toString('utf8'))))
+      res.on('end', () => {
+        let data=Buffer.concat(chunks)
+        if(data[0]===0x1f && data[1]===0x8b){try{data=gunzipSync(data,{maxOutputLength:20_000_000})}catch{reject(new Error('压缩正文无效或超过大小限制'));return}}
+        if(data.subarray(0,5).toString()==='%PDF-'){readPdf(data,signal).then(resolve,reject);return}
+        const raw=data.toString('utf8')
+        if(/xml/.test(String(res.headers['content-type']))){
+          const $=load(raw,{xml:true});$('script,style').remove()
+          const body=$('body').first();const node=body.length?body:$('article').first()
+          if(!node.length){reject(new Error('XML 未提供论文正文'));return}
+          node.find('p,title,sec').prepend('\n');resolve('[公开 XML 正文；最多提取前 100000 字]\n'+node.text().trim().slice(0,100000));return
+        }
+        const body=extractText(raw)
+        resolve(url.hostname==='arxiv.org' && url.pathname.startsWith('/abs/')?'[仅摘要页面，未取得论文全文]\n'+body:body)
+      })
     })
     req.setTimeout(15000, () => req.destroy(new Error('读取网页超时')))
     req.on('error', reject)

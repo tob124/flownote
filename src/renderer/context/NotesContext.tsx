@@ -9,18 +9,20 @@ interface NotesCtx {
   isLoading:boolean; isRefreshing:boolean; error:string|null
   setSearchKeyword:(kw:string)=>void; loadNotes:()=>Promise<void>
   addNote:(content:string)=>Promise<string|null>; deleteNote:(id:string)=>Promise<boolean>
-  savedId:string|null; focusId:string|null; revealNote:(id:string)=>void
+  savedId:string|null; focusId:string|null; focusRequest:number; revealNote:(id:string)=>void
 }
 const NotesContext=createContext<NotesCtx>({
   notes:[],filteredNotes:[],searchKeyword:'',filters:EMPTY_NOTE_FILTERS,setFilters:()=>{},clearFilters:()=>{},
   isLoading:false,isRefreshing:false,error:null,setSearchKeyword:()=>{},loadNotes:async()=>{},
-  addNote:async()=>null,deleteNote:async()=>false,savedId:null,focusId:null,revealNote:()=>{}
+  addNote:async()=>null,deleteNote:async()=>false,savedId:null,focusId:null,focusRequest:0,revealNote:()=>{}
 })
 export function NotesProvider({children}:{children:ReactNode}):JSX.Element {
   const {config,isLoaded}=useConfig()
   const dir=config.sync_dir
   const dirRef=useRef(dir);dirRef.current=dir
-  const [notes,setNotes]=useState<Note[]>([])
+  const [storedNotes,setNotes]=useState<Note[]>([])
+  const [notesDir,setNotesDir]=useState(dir)
+  const notes=notesDir===dir?storedNotes:[]
   const [searchKeyword,setSearchKeyword]=useState('')
   const [filters,setFilters]=useState<NoteFilters>(EMPTY_NOTE_FILTERS)
   const [isLoading,setLoading]=useState(false)
@@ -28,6 +30,7 @@ export function NotesProvider({children}:{children:ReactNode}):JSX.Element {
   const [error,setError]=useState<string|null>(null)
   const [savedId,setSavedId]=useState<string|null>(null)
   const [focusId,setFocusId]=useState<string|null>(null)
+  const [focusRequest,setFocusRequest]=useState(0)
   const sequence=useRef(0)
   const loaded=useRef(false)
   const loadNotes=useCallback(async()=>{
@@ -37,13 +40,14 @@ export function NotesProvider({children}:{children:ReactNode}):JSX.Element {
     try{
       // Load one canonical list. Search and filters never hide a successful save from the cache.
       const result=await window.api.notes.loadAll()
-      if(ticket===sequence.current && dirRef.current===dir){setNotes(result);loaded.current=true}
+      if(ticket===sequence.current && dirRef.current===dir){setNotesDir(dir);setNotes(result);loaded.current=true}
     }catch(e){if(ticket===sequence.current && dirRef.current===dir)setError(String(e))}
     finally{if(ticket===sequence.current && dirRef.current===dir){setLoading(false);setRefreshing(false)}}
   },[dir,isLoaded])
   useEffect(()=>{
     ++sequence.current;loaded.current=false;setNotes([]);setError(null);setSavedId(null);setFocusId(null)
-    setSearchKeyword('');setFilters(EMPTY_NOTE_FILTERS);void loadNotes()
+    try{const saved=JSON.parse(localStorage.getItem('flownote:query:'+dir)||'{}');setSearchKeyword(typeof saved.query==='string'?saved.query:'');setFilters({...EMPTY_NOTE_FILTERS,...saved.filters})}catch{setSearchKeyword('');setFilters(EMPTY_NOTE_FILTERS)}
+    void loadNotes()
   },[loadNotes])
   useEffect(()=>{
     let timer:ReturnType<typeof setTimeout>|undefined
@@ -54,12 +58,15 @@ export function NotesProvider({children}:{children:ReactNode}):JSX.Element {
     window.addEventListener('focus',focus)
     return()=>{if(timer)clearTimeout(timer);unsubs.forEach(fn=>fn());window.removeEventListener('focus',focus);++sequence.current}
   },[loadNotes])
+  const persistedDir=useRef(dir)
+  useEffect(()=>{if(persistedDir.current!==dir){persistedDir.current=dir;return}try{localStorage.setItem('flownote:query:'+dir,JSON.stringify({query:searchKeyword,filters}))}catch{}},[dir,searchKeyword,filters])
   const addNote=useCallback(async(content:string):Promise<string|null>=>{
     try{
       const note=await window.api.notes.createRecord(content)
       if(dirRef.current===dir){
         // Invalidate older reads so they cannot erase this just-saved record.
         ++sequence.current
+        setNotesDir(dir)
         setNotes(current=>[note,...current.filter(n=>n.id!==note.id)].sort(newestFirst))
         setSavedId(note.id);setError(null);setLoading(false);setRefreshing(false)
         void loadNotes()
@@ -72,11 +79,11 @@ export function NotesProvider({children}:{children:ReactNode}):JSX.Element {
     try{const ok=await window.api.notes.delete(id);if(ok && dirRef.current===dir){setNotes(v=>v.filter(n=>n.id!==id));void loadNotes()}return ok}
     catch(e){setError(String(e));return false}
   },[dir,loadNotes])
-  const revealNote=useCallback((id:string)=>{setSearchKeyword('');setFilters(EMPTY_NOTE_FILTERS);setFocusId(id);void loadNotes()},[loadNotes])
+  const revealNote=useCallback((id:string)=>{setSearchKeyword('');setFilters(EMPTY_NOTE_FILTERS);setFocusId(id);setFocusRequest(v=>v+1);void loadNotes()},[loadNotes])
   const filteredNotes=useMemo(()=>{
     return filterNotes(searchNotes(notes,searchKeyword),filters)
   },[notes,searchKeyword,filters])
   return <NotesContext.Provider value={{notes,filteredNotes,searchKeyword,filters,setFilters,clearFilters:()=>setFilters(EMPTY_NOTE_FILTERS),
-    isLoading,isRefreshing,error,setSearchKeyword,loadNotes,addNote,deleteNote,savedId,focusId,revealNote}}>{children}</NotesContext.Provider>
+    isLoading,isRefreshing,error,setSearchKeyword,loadNotes,addNote,deleteNote,savedId,focusId,focusRequest,revealNote}}>{children}</NotesContext.Provider>
 }
 export function useNotes():NotesCtx{return useContext(NotesContext)}

@@ -1,9 +1,10 @@
 import {ActionMenu,Button,Icon} from './ui/Controls'
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { NoteFile } from '../../shared/types'
 import { useNotes } from '../context/NotesContext'
 import { useConfig } from '../context/ConfigContext'
 import '../styles/quickinput.css'
+import { useDraftGuard } from '../utils/useDraftGuard'
 
 // 轻量语音输入：浏览器原生 Web Speech API（非神经网络）
 type SpeechRecognitionCtor = new () => SpeechRecognitionConfig
@@ -35,38 +36,53 @@ interface SpeechRecognitionResultLike {
   isFinal: boolean
 }
 
-export default function QuickInput(): JSX.Element {
-  const [text, setText] = useState('')
+export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean;onSaved?:(id:string,warning?:string)=>void}): JSX.Element {
+  const { config } = useConfig()
+  const draftKey='flownote:capture:v1:'+config.sync_dir
+  const initial=useRef<{text:string;files:NoteFile[]}>((()=>{try{return JSON.parse(localStorage.getItem(draftKey)||'{"text":"","files":[]}')}catch{return {text:'',files:[]}}})()).current
+  const [text, setText] = useState(typeof initial.text==='string'?initial.text:'')
   const [sending, setSending] = useState(false)
   const [listening, setListening] = useState(false)
   const [polishing, setPolishing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pendingFiles, setPendingFiles] = useState<NoteFile[]>([])
+  const [pendingFiles, setPendingFiles] = useState<NoteFile[]>(Array.isArray(initial.files)?initial.files:[])
   const [attaching, setAttaching] = useState(false)
   const { addNote, savedId, revealNote } = useNotes()
-  const { config } = useConfig()
   const recognitionRef = useRef<SpeechRecognitionConfig | null>(null)
   const [expanded, setExpanded] = useState(false)
 
+  const alive=useRef(true)
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;recognitionRef.current?.stop()}},[])
+  function persist():boolean {
+    if(sending || attaching || polishing || listening) { setError('请等待当前操作完成后再离开'); return false }
+    try { localStorage.setItem(draftKey,JSON.stringify({text,files:pendingFiles}));return true }
+    catch { setError('本机草稿无法保存，请先保存笔记再离开');return false }
+  }
+  useDraftGuard(persist)
+  useEffect(()=>{if(!sending&&!attaching&&!polishing&&!listening) persist()},[text,pendingFiles])
   async function saveNote(): Promise<void> {
     const trimmed = text.trim()
     if (!trimmed || sending) return
     setSending(true)
     setError(null)
     const id = await addNote(trimmed)
+    if (!alive.current) return
+    let warning: string | undefined
     if (id) {
       // 保存成功后再把待附加的文件挂到该笔记上
       if (pendingFiles.length) {
         try {
           await window.api.files.attach(id, pendingFiles)
         } catch {
-          setError('笔记已保存，但附件挂载失败，可稍后在卡片中重新添加')
+          warning='笔记已保存，但附件挂载失败，请重新添加附件'; setError(warning)
         }
       }
+      try { localStorage.removeItem(draftKey) } catch { /* save succeeded */ }
       setText('')
       setPendingFiles([])
     }
     setSending(false)
+    if(id && alive.current) onSaved?.(id,warning)
   }
 
   async function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): Promise<void> {
@@ -177,9 +193,9 @@ export default function QuickInput(): JSX.Element {
   const polishEnabled = Boolean(config.api_key) && text.trim().length > 0
 
   return (
-    <div className={'quick-input-container'+(expanded?' expanded':'')}>
-      <label className="composer-label" htmlFor="quick-note">写下一条记录</label>
-      <textarea id="quick-note" className={'quick-input'+(expanded?' expanded':'')}
+    <div className={'quick-input-container'+(expanded&&!workspace?' expanded':'')}>
+      <label className="composer-label" htmlFor="quick-note">{workspace?'新建笔记':'写下一条记录'}</label>
+      <textarea id="quick-note" className={'quick-input'+(expanded&&!workspace?' expanded':'')}
         placeholder="此刻有什么值得记下来？" value={text} onChange={e=>setText(e.target.value)}
         onKeyDown={e=>void handleKeyDown(e)} disabled={sending} rows={3}/>
       {pendingFiles.length>0 && <div className="quick-input-pending">
@@ -191,7 +207,7 @@ export default function QuickInput(): JSX.Element {
         <div className="quick-input-actions">
           <Button variant="quiet" icon="clip" onClick={()=>void handleAttach()} disabled={attaching}>添加附件</Button>
           <ActionMenu label="输入工具" items={[
-            {label:expanded?'收起编辑区':'展开编辑区',icon:'expand',onSelect:()=>setExpanded(v=>!v)},
+            ...(!workspace?[{label:expanded?'收起编辑区':'展开编辑区',icon:'expand' as const,onSelect:()=>setExpanded(v=>!v)}]:[]),
             {label:listening?'停止语音输入':'语音输入',icon:'mic',disabled:!speechSupported,onSelect:toggleListening},
             {label:polishing?'正在润色…':'润色文字',icon:'spark',disabled:!polishEnabled||polishing,onSelect:()=>void handlePolish()}
           ]}/>

@@ -1,0 +1,8 @@
+{
+  "text": {
+    "text": "[PDF：共 1 页，提取前 1 页；仅代表所示页码覆盖范围]\n\n[第 1 页]\nAn open research paper should be read with its methods, population and limitations. This fixture verifies isola"
+  },
+  "scanned": {
+    "error": "Error: 需要文字版：此 PDF 未提取到足够文本，可能是扫描件"
+  }
+}

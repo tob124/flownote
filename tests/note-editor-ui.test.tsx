@@ -62,7 +62,7 @@ it('keeps an old draft when the disk changes and requires explicit overwrite', a
   await waitFor(() => expect(loadNote(id, dir)?.raw_content).toBe('我的草稿'))
 })
 
-it('offers save, keep-draft, and discard when closing a changed editor', async () => {
+it('keeps a local draft when closing without changing the saved note', async () => {
   const { dir, id } = setup()
   const user = userEvent.setup()
   const onClose = vi.fn()
@@ -70,9 +70,20 @@ it('offers save, keep-draft, and discard when closing a changed editor', async (
   await user.click(screen.getByRole('button', { name: '编辑笔记' }))
   fireEvent.change(screen.getByLabelText('笔记正文'), { target: { value: '尚未提交的草稿' } })
   await user.click(screen.getByRole('button', { name: '关闭' }))
-  expect(onClose).not.toHaveBeenCalled()
-  expect(screen.getByRole('alertdialog', { name: '退出编辑选择' })).toBeTruthy()
-  await user.click(screen.getByRole('button', { name: '保留草稿退出' }))
+  expect(window.localStorage.getItem('flownote:note-draft:'+dir+':'+id)).toContain('尚未提交的草稿')
   expect(onClose).toHaveBeenCalledOnce()
   expect(loadNote(id, dir)?.raw_content).toBe('原文')
+})
+
+it('blocks navigation when local draft storage fails', async () => {
+  const {dir,id}=setup()
+  const user=userEvent.setup(),onClose=vi.fn()
+  render(<NoteDetailDialog note={loadNote(id,dir)!} onClose={onClose}/>)
+  await user.click(screen.getByRole('button',{name:'编辑笔记'}))
+  const failure=vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('quota')})
+  fireEvent.change(screen.getByLabelText('笔记正文'),{target:{value:'不能丢失的内容'}})
+  await user.click(screen.getByRole('button',{name:'关闭'}))
+  expect(onClose).not.toHaveBeenCalled()
+  expect(screen.getByText(/本机草稿无法保存/)).toBeTruthy()
+  failure.mockRestore()
 })

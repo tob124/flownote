@@ -25,13 +25,17 @@ export function registerFilesIpc(): void {
     }
   )
 
-  ipcMain.handle(IPC_CHANNELS.FILES_OPEN, (_e, storedName: string): boolean => {
-    const syncDir = getSyncDir()
-    if (!syncDir) return false
-    const path = attachmentPath(syncDir, storedName)
-    if (!path) return false
-    void shell.openPath(path)
-    return true
+  ipcMain.handle(IPC_CHANNELS.FILES_OPEN, async (_e, noteId: string, storedName: string, reveal = false): Promise<{ok:boolean;error?:string}> => {
+    try {
+      const syncDir = getSyncDir()
+      const note = loadNote(noteId, syncDir)
+      if (!note?.attachments?.some(a => a.storedName === storedName)) return {ok:false,error:'附件不属于这条笔记，或笔记已移除'}
+      const path = attachmentPath(syncDir, storedName)
+      if (!path) return {ok:false,error:'附件文件不存在，或文件路径无效'}
+      if (reveal) { shell.showItemInFolder(path); return {ok:true} }
+      const error = await shell.openPath(path)
+      return error ? {ok:false,error:'系统无法打开附件，请检查默认应用或文件权限：'+error} : {ok:true}
+    } catch (error) { return {ok:false,error:'打开附件失败：'+String(error)} }
   })
 
   ipcMain.handle(

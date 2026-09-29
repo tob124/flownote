@@ -21,6 +21,7 @@ export default function DreamPage():JSX.Element{
     try{
       const [r,j,l]=await Promise.all([window.api.thinking.reports(),window.api.thinking.jobs(),window.api.dream.getReports()])
       if(ticket!==seq.current)return
+      setSelection(old=>old || (j.find(x=>x.kind==='dream' && ['queued','running'].includes(x.status)) ? {kind:'new',id:j.find(x=>x.kind==='dream' && ['queued','running'].includes(x.status))!.owner.id} : r[0]?{kind:'new',id:r[0].id}:null))
       setReports(r);setJobs(j.filter(x=>x.kind==='dream'));setLegacy(l);setError('')
     }catch(e){if(ticket===seq.current)setError(String(e))}
   },[config.sync_dir])

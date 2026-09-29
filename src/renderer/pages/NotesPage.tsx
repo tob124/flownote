@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Note } from '../../shared/types'
 import { useNotes } from '../context/NotesContext'
-import QuickInput from '../components/QuickInput'
-import SearchBar from '../components/SearchBar'
-import NoteList from '../components/NoteList'
+import NotesWorkspace from '../components/NotesWorkspace'
+import { mayLeave } from '../utils/workspace'
 import {Button} from '../components/ui/Controls'
 import '../styles/notes-page.css'
 
@@ -91,18 +90,9 @@ function TrashView({ onRestore }: { onRestore: () => Promise<void> }): JSX.Eleme
 export default function NotesPage(): JSX.Element {
   const [view, setView] = useState<'notes' | 'trash'>('notes')
   const { loadNotes } = useNotes()
-  return (
-    <div className="notes-page">
-      <header className="notes-page-heading"><div><h1>{view==='notes'?'笔记':'回收站'}</h1><p>{view==='notes'?'留住想法，再慢慢想清楚。':'查看和恢复移除的记录。'}</p></div>
-        <Button variant="quiet" icon={view==='notes'?'trash':'note'} onClick={()=>setView(view==='notes'?'trash':'notes')}>{view==='notes'?'回收站':'返回笔记'}</Button>
-      </header>
-      {view === 'notes' ? (
-        <>
-          <QuickInput />
-          <SearchBar />
-          <div className="notes-page-list"><NoteList /></div>
-        </>
-      ) : <TrashView onRestore={loadNotes} />}
-    </div>
-  )
+  if(view === 'notes') return <NotesWorkspace onTrash={()=>setView('trash')}/>
+  return <div className="notes-page">
+    <header className="notes-page-heading"><h1>回收站</h1><Button variant="quiet" icon="note" onClick={()=>{if(mayLeave())setView('notes')}}>返回笔记</Button></header>
+    <TrashView onRestore={loadNotes}/>
+  </div>
 }

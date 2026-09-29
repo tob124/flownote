@@ -4,13 +4,18 @@ export interface Usage { input: number; output: number; searches: number }
 export interface SourceEvidence {
   id: string; url: string; title: string; fetched_at: number
   text: string; excerpt?: string; kind: 'primary' | 'secondary' | 'unknown'
-  read_status?: 'read' | 'failed' | 'not_attempted'
+  read_status?: 'read' | 'abstract' | 'failed' | 'not_attempted'
   read_error?: string
+  analysis_ranges?: {start:number;end:number}[]
+  document_type?: 'author' | 'publisher' | 'paper' | 'review' | 'repost' | 'unknown'
+  format?: 'html' | 'xml' | 'pdf'; coverage?: string; identifier?: string; version?: string
 }
 export interface Recommendation {
   id: string; title: string; author: string; original_title: string; translation: string
   question: string; idea: string; relevance: string; limits: string; reading: string
   attribution: 'author' | 'extension'; identity_source_ids: string[]; source_ids: string[]
+  material_type?: 'book' | 'paper' | 'article'
+  quality?: {kind:'rating'|'professional_review';source_id:string;excerpt:string;platform?:string;score?:number;count?:number;edition:string;checked_at:number;reason:string}
   evidence: 'primary' | 'secondary' | 'unverified'; quote?: string; feedback?: Feedback
 }
 export interface NoteInsight {
@@ -21,6 +26,7 @@ export interface NoteInsight {
 export interface DreamReport {
   schema_version: 1; id: string; created_at: number; body: string
   notes: { id: string; hash: string; title: string }[]
+  supplement_body?: string; supplement_status?: 'pending' | 'complete' | 'failed'
   coverage: string; recommendations: Recommendation[]; sources: SourceEvidence[]
   warning?: string; usage: Usage
 }

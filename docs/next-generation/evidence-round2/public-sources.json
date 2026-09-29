@@ -1,0 +1,16 @@
+[
+  {
+    "url": "https://arxiv.org/abs/1706.03762",
+    "ok": true,
+    "characters": 4578,
+    "coverage": "[仅摘要页面，未取得论文全文]",
+    "hasTransformer": true
+  },
+  {
+    "url": "https://arxiv.org/pdf/1706.03762",
+    "ok": true,
+    "characters": 41864,
+    "coverage": "[PDF：共 15 页，提取前 15 页；仅代表所示页码覆盖范围]",
+    "hasTransformer": true
+  }
+]

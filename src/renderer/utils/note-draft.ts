@@ -33,8 +33,8 @@ export function loadNoteDraft(
 }
 export function saveNoteDraft(
   storage: Pick<Storage, 'setItem'>, library: string, noteId: string, draft: NoteDraft
-): void {
-  try { storage.setItem(key(library, noteId), JSON.stringify(draft)) } catch { /* editor remains usable */ }
+): boolean {
+  try { storage.setItem(key(library, noteId), JSON.stringify(draft)); return true } catch { return false }
 }
 export function clearNoteDraft(
   storage: Pick<Storage, 'removeItem'>, library: string, noteId: string
