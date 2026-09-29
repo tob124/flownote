@@ -1,4 +1,5 @@
 import ThoughtPanel from './ThoughtPanel'
+import {ActionMenu,Button} from './ui/Controls'
 import { memo, useRef, useState } from 'react'
 import type { Note } from '../../shared/types'
 import AttachmentList from './AttachmentList'
@@ -72,26 +73,18 @@ export default memo(function NoteCard({
       <div className="note-card-header">
         <span className="note-card-category">{note.category || 'Inbox'}</span>
         <span className="note-card-date">{note.created_at}</span>
-        <span className={`note-card-status ${note.ai_status}`}>
+        {note.ai_status!=='done' && <span className={`note-card-status ${note.ai_status}`}>
           {STATUS_LABELS[note.ai_status] || note.ai_status}
-        </span>
-        <button className={`note-card-favorite-btn${note.favorite ? ' active' : ''}`}
+        </span>}
+        <div className="note-card-utilities">
+        <Button variant="quiet" icon="star" iconOnly className={note.favorite ? 'is-favorite' : ''}
           onClick={() => void toggleFavorite()} title={note.favorite ? '取消收藏' : '收藏笔记'}
-          aria-label={note.favorite ? '取消收藏' : '收藏笔记'} disabled={busy}>
-          {note.favorite ? '★' : '☆'}
-        </button>
-        <button className="note-card-attach-btn" onClick={() => void onAttach()} title="附加文件">
-          +
-        </button>
-        {
-          <button
-            className="note-card-delete-btn"
-            onClick={() => setShowConfirm(true)}
-            title="移至回收站"
-          >
-            ×
-          </button>
-        }
+          aria-label={note.favorite ? '取消收藏' : '收藏笔记'} aria-pressed={!!note.favorite} disabled={busy}/>
+        <ActionMenu label="笔记更多操作" items={[
+          {label:'阅读 / 编辑',icon:'note',onSelect:()=>onOpenDetail(note)},
+          {label:'添加附件',icon:'clip',disabled:busy,onSelect:()=>void onAttach()},
+          {label:'移至回收站',icon:'trash',danger:true,separator:true,onSelect:()=>setShowConfirm(true)}
+        ]}/></div>
       </div>
 
       <div

@@ -1,3 +1,4 @@
+import {ActionMenu,Button,Icon} from './ui/Controls'
 import { useRef, useState, type KeyboardEvent } from 'react'
 import type { NoteFile } from '../../shared/types'
 import { useNotes } from '../context/NotesContext'
@@ -176,90 +177,33 @@ export default function QuickInput(): JSX.Element {
   const polishEnabled = Boolean(config.api_key) && text.trim().length > 0
 
   return (
-    <div className={`quick-input-container${expanded ? ' expanded' : ''}`}>
+    <div className={'quick-input-container'+(expanded?' expanded':'')}>
+      <label className="composer-label" htmlFor="quick-note">写下一条记录</label>
+      <textarea id="quick-note" className={'quick-input'+(expanded?' expanded':'')}
+        placeholder="此刻有什么值得记下来？" value={text} onChange={e=>setText(e.target.value)}
+        onKeyDown={e=>void handleKeyDown(e)} disabled={sending} rows={3}/>
+      {pendingFiles.length>0 && <div className="quick-input-pending">
+        {pendingFiles.map((f,i)=><span className="quick-input-file-chip" key={f.storedName+i}><Icon name="clip"/>{f.name}
+          <button aria-label={'移除附件 '+f.name} onClick={()=>setPendingFiles(prev=>prev.filter((_,idx)=>idx!==i))}>×</button>
+        </span>)}
+      </div>}
       <div className="quick-input-toolbar">
-        <span className="quick-input-hint">Alt + Enter 保存</span>
         <div className="quick-input-actions">
-          {listening && <span className="quick-input-listening">正在聆听…</span>}
-          <button
-            className="quick-input-btn"
-            onClick={() => void saveNote()}
-            disabled={!text.trim() || sending}
-            title="保存笔记（或按 Alt + Enter）"
-          >
-            {sending ? '…' : '💾 保存笔记'}
-          </button>
-          <button
-            className="quick-input-btn"
-            onClick={() => setExpanded((v) => !v)}
-            title={expanded ? '收拢文本框' : '展开文本框（适合大段输入）'}
-          >
-            {expanded ? '⤡ 收拢' : '⤢ 展开'}
-          </button>
-          <button
-            className={`quick-input-btn${listening ? ' active' : ''}`}
-            onClick={toggleListening}
-            title={
-              speechSupported ? '语音输入' : '语音输入（当前环境不支持，需使用键盘输入）'
-            }
-          >
-            {listening ? '⏹' : '🎤'}
-          </button>
-          <button
-            className="quick-input-btn"
-            onClick={() => void handleAttach()}
-            disabled={attaching}
-            title="添加附件（随本次保存一起挂到笔记）"
-          >
-            {attaching ? '…' : '📎 附件'}
-          </button>
-          <button
-            className="quick-input-btn"
-            onClick={() => void handlePolish()}
-            disabled={!polishEnabled || polishing}
-            title="AI 润色（去口吃/语气词，不改顺序）"
-          >
-            {polishing ? '…' : '✨ 润色'}
-          </button>
+          <Button variant="quiet" icon="clip" onClick={()=>void handleAttach()} disabled={attaching}>添加附件</Button>
+          <ActionMenu label="输入工具" items={[
+            {label:expanded?'收起编辑区':'展开编辑区',icon:'expand',onSelect:()=>setExpanded(v=>!v)},
+            {label:listening?'停止语音输入':'语音输入',icon:'mic',disabled:!speechSupported,onSelect:toggleListening},
+            {label:polishing?'正在润色…':'润色文字',icon:'spark',disabled:!polishEnabled||polishing,onSelect:()=>void handlePolish()}
+          ]}/>
+          {listening && <span role="status" className="quick-input-listening">正在聆听…</span>}
+        </div>
+        <div className="composer-save">
+          <span className="quick-input-hint">{text.length?text.length+' 字 · ':''}Alt + Enter</span>
+          <Button variant="primary" onClick={()=>void saveNote()} disabled={!text.trim()||sending}>{sending?'正在保存…':'保存笔记'}</Button>
         </div>
       </div>
-      {pendingFiles.length > 0 && (
-        <div className="quick-input-pending">
-          <span className="quick-input-hint">待附加：</span>
-          {pendingFiles.map((f, i) => (
-            <span key={f.storedName + i} className="quick-input-file-chip">
-              📎 {f.name}
-              <button
-                onClick={() => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                title="移除"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {savedId && <p role="status">已保存 <button type="button" onClick={()=>revealNote(savedId)}>查看笔记</button></p>}
-      {error && <div className="quick-input-error">{error}</div>}
-      <textarea
-        className={`quick-input${expanded ? ' expanded' : ''}`}
-        placeholder="记录灵感... (Alt + Enter 保存)"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => void handleKeyDown(e)}
-        disabled={sending}
-        rows={3}
-      />
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          textAlign: 'right',
-          marginTop: 4
-        }}
-      >
-        {text.length} 字
-      </div>
+      {savedId && <div className="composer-receipt" role="status"><span>已保存到笔记</span><Button variant="quiet" onClick={()=>revealNote(savedId)}>查看笔记</Button></div>}
+      {error && <div role="alert" className="quick-input-error">{error}</div>}
     </div>
   )
 }

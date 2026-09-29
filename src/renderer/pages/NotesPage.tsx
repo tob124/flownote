@@ -4,6 +4,7 @@ import { useNotes } from '../context/NotesContext'
 import QuickInput from '../components/QuickInput'
 import SearchBar from '../components/SearchBar'
 import NoteList from '../components/NoteList'
+import {Button} from '../components/ui/Controls'
 import '../styles/notes-page.css'
 
 function TrashView({ onRestore }: { onRestore: () => Promise<void> }): JSX.Element {
@@ -92,10 +93,9 @@ export default function NotesPage(): JSX.Element {
   const { loadNotes } = useNotes()
   return (
     <div className="notes-page">
-      <div className="notes-page-tabs" role="tablist" aria-label="笔记区域">
-        <button role="tab" aria-selected={view === 'notes'} className={view === 'notes' ? 'active' : ''} onClick={() => setView('notes')}>笔记</button>
-        <button role="tab" aria-selected={view === 'trash'} className={view === 'trash' ? 'active' : ''} onClick={() => setView('trash')}>回收站</button>
-      </div>
+      <header className="notes-page-heading"><div><h1>{view==='notes'?'笔记':'回收站'}</h1><p>{view==='notes'?'留住想法，再慢慢想清楚。':'查看和恢复移除的记录。'}</p></div>
+        <Button variant="quiet" icon={view==='notes'?'trash':'note'} onClick={()=>setView(view==='notes'?'trash':'notes')}>{view==='notes'?'回收站':'返回笔记'}</Button>
+      </header>
       {view === 'notes' ? (
         <>
           <QuickInput />

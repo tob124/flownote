@@ -1,17 +1,18 @@
 import { useApp, type PageId } from '../context/AppContext'
+import {Icon,type IconName} from './ui/Controls'
 import '../styles/sidebar.css'
 
-const PRIMARY: { id: PageId; label: string; mark: string }[] = [
-  { id: 'notes', label: '记录与笔记', mark: '记' },
-  { id: 'stats', label: '记录概览', mark: '览' }
+const PRIMARY: { id: PageId; label: string; mark: IconName }[] = [
+  { id: 'notes', label: '记录与笔记', mark: 'note' },
+  { id: 'wikis', label: 'Wiki', mark: 'book' },
+  { id: 'dream', label: 'Dream', mark: 'moon' }
 ]
-const LIBRARY: { id: PageId; label: string; mark: string }[] = [
-  { id: 'wikis', label: 'Wiki', mark: '知' },
-  { id: 'dream', label: 'Dream', mark: '思' }
+const LIBRARY: typeof PRIMARY = [
+  { id: 'stats', label: '记录概览', mark: 'chart' }
 ]
-const TOOLS: { id: PageId; label: string; mark: string }[] = [
-  { id: 'notifications', label: '通知', mark: '讯' },
-  { id: 'settings', label: '设置', mark: '设' }
+const TOOLS: typeof PRIMARY = [
+  { id: 'notifications', label: '通知', mark: 'bell' },
+  { id: 'settings', label: '设置', mark: 'settings' }
 ]
 
 export default function Sidebar(): JSX.Element {
@@ -25,7 +26,7 @@ export default function Sidebar(): JSX.Element {
         title={item.label}
         aria-current={pageId === item.id ? 'page' : undefined}
       >
-        <span className="sidebar-nav-mark" aria-hidden="true">{item.mark}</span>
+        <span className="sidebar-nav-mark" aria-hidden="true"><Icon name={item.mark}/></span>
         <span className="sidebar-nav-label">{item.label}</span>
       </button>
     </li>
@@ -34,17 +35,15 @@ export default function Sidebar(): JSX.Element {
     <aside className="sidebar" aria-label="主导航">
       <div className="sidebar-header">
         <div className="sidebar-title">FlowNote</div>
-        <div className="sidebar-subtitle">写下所见，推进所想</div>
+        <div className="sidebar-subtitle">个人笔记与思考</div>
       </div>
       <nav className="sidebar-nav-wrap">
-        <div className="sidebar-group-label">日常</div>
         <ul className="sidebar-nav">{renderItems(PRIMARY)}</ul>
-        <div className="sidebar-group-label">资料与回顾</div>
+        <div className="sidebar-group-label">回顾</div>
         <ul className="sidebar-nav">{renderItems(LIBRARY)}</ul>
         <div className="sidebar-nav-spacer" />
         <ul className="sidebar-nav sidebar-nav-tools">{renderItems(TOOLS)}</ul>
       </nav>
-      <div className="sidebar-footer">PRIVATE WORKSPACE</div>
     </aside>
   )
 }

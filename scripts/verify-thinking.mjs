@@ -79,11 +79,11 @@ try{
  await page.evaluate(async()=>{const cfg=await window.api.config.load();await window.api.config.save({...cfg,api_key:'test-fixture'});await window.api.classifier.poke()})
  await poll(()=>page.evaluate(async(id)=>(await window.api.notes.loadAll()).find(n=>n.id===id)?.ai_status==='done',saved.id))
  await poll(()=>page.evaluate(async(id)=>(await window.api.thinking.view({kind:'note',id})).insight?.body.length>0,saved.id))
- await page.locator('#note-'+saved.id).getByRole('button',{name:'展开',exact:true}).click()
+ await page.locator('#note-'+saved.id).getByRole('button',{name:'AI 回应与讨论',exact:true}).click()
  const panel=page.getByRole('dialog',{name:'笔记的回应与延伸阅读'}).getByRole('region',{name:'AI 评论与讨论'})
  await panel.getByRole('tab',{name:'继续讨论',exact:true}).click()
  await panel.getByRole('textbox',{name:'继续追问'}).fill('如何核对？')
- await panel.getByRole('button',{name:'继续讨论',exact:true}).click()
+ await panel.getByRole('button',{name:'发送',exact:true}).click()
  await poll(()=>page.evaluate(async(id)=>(await window.api.thinking.view({kind:'note',id})).thread.messages.length===2,saved.id))
  // Seed a reviewed proposal to test the confirmation boundary without presenting fabricated evidence as real.
  const correction={schema_version:1,id:'e2e-proposal',note_id:saved.id,input_hash:createHash('sha256').update(saved.raw_content.trim()).digest('hex'),created_at:Date.now(),
@@ -92,7 +92,7 @@ try{
  mkdirSync(join(dir,'thinking','corrections'),{recursive:true})
  writeFileSync(join(dir,'thinking','corrections',correction.id+'.json'),JSON.stringify(correction))
  await page.reload()
- await page.locator('#note-'+saved.id).getByRole('button',{name:'展开',exact:true}).click()
+ await page.locator('#note-'+saved.id).getByRole('button',{name:'AI 回应与讨论',exact:true}).click()
  await page.getByRole('dialog').getByRole('button',{name:'接纳并融入 Wiki'}).click()
  await poll(()=>page.evaluate(async(id)=>(await window.api.thinking.view({kind:'note',id})).corrections.some(c=>c.status==='applied'),saved.id))
  const applied=JSON.parse(readFileSync(join(dir,'thinking','corrections',correction.id+'.json'),'utf8'))
@@ -113,6 +113,14 @@ try{
  assert.equal(view.thread.messages.length,2)
  assert.equal(view.corrections[0].status,'applied')
  assert.equal(await page.getByRole('button',{name:/我的目标|我的成果|主题知识库/}).count(),0)
+ // Mixed tag + text search runs in the real renderer against saved notes.
+ await page.getByRole('searchbox',{name:'搜索笔记'}).fill('#验证 一般观点')
+ await page.locator('#note-'+saved.id).waitFor()
+ assert.equal(await page.locator('.note-card').count(),1)
+ await page.getByRole('searchbox',{name:'搜索笔记'}).fill('#不存在 一般观点')
+ await poll(async()=>await page.locator('.note-card').count()===0)
+ await page.getByRole('searchbox',{name:'搜索笔记'}).fill('')
+ await page.locator('#note-'+saved.id).waitFor()
  assert.deepEqual(errors,[])
  console.log(JSON.stringify({ok:true,run,note:saved.id,checks:['save visible offline','legacy IDs','clear filter and locate','classification','comment','follow-up','accept updates Wiki','Dream','restart persistence','no renderer errors']}))
  if(process.env.FLOWNOTE_E2E_HOLD==='1'){

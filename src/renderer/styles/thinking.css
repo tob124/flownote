@@ -1,7 +1,7 @@
 .thought-panel{margin-top:16px;padding:16px 18px;border-top:1px solid var(--border-light);background:var(--bg-secondary);border-radius:8px;color:var(--text-primary);font-size:14px;line-height:1.7;overflow-wrap:anywhere}
 .thought-heading{display:flex;align-items:center;gap:14px;color:var(--accent)}
 .thought-heading span,.thought-meta,.thought-sources small{font-size:12px;color:var(--text-muted)}
-.thought-panel button,.dream-workspace button{border:1px solid var(--border-light);border-radius:6px;padding:5px 10px;background:var(--bg-primary);color:var(--text-primary);cursor:pointer;font:inherit}
+:where(.thought-panel,.dream-workspace) button:not(.fn-button){border:1px solid var(--border-light);border-radius:6px;padding:5px 10px;background:var(--bg-primary);color:var(--text-primary);cursor:pointer;font:inherit}
 .thought-panel button:disabled{opacity:.5;cursor:default}
 .thought-panel button[aria-pressed=true],.thought-panel button.primary{border-color:var(--accent);color:var(--accent)}
 .thought-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}

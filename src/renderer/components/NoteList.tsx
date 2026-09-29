@@ -78,16 +78,18 @@ export default function NoteList(): JSX.Element {
           <button
             className={`note-list-view-btn${!grid ? ' active' : ''}`}
             onClick={() => toggleGrid(false)}
+            aria-pressed={!grid}
             title="单列列表"
           >
-            ☰ 列表
+            列表
           </button>
           <button
             className={`note-list-view-btn${grid ? ' active' : ''}`}
             onClick={() => toggleGrid(true)}
+            aria-pressed={grid}
             title="双列网格"
           >
-            ▦ 网格
+            网格
           </button>
         </div>
       </div>

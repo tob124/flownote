@@ -1,0 +1,14 @@
+:root{--font-ui:'Segoe UI','Microsoft YaHei UI','Microsoft YaHei',system-ui,sans-serif;--control-height:34px;--control-radius:7px}
+button.fn-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:var(--control-height);padding:6px 12px;border:1px solid transparent;border-radius:var(--control-radius);font-family:var(--font-ui);font-size:13px;line-height:20px;font-weight:500;cursor:pointer;white-space:nowrap;box-shadow:none;transition:background .12s,color .12s}
+button.fn-button svg{flex-shrink:0}button.fn-button>span:empty{display:none}
+button.fn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text,#fff)}
+button.fn-primary:hover:not(:disabled){background:var(--accent-hover)}
+button.fn-secondary{background:var(--bg-card);border-color:var(--border);color:var(--text-primary)}
+button.fn-quiet{background:transparent;color:var(--text-secondary)}
+button.fn-quiet:hover:not(:disabled),button.fn-secondary:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary)}
+button.fn-danger{color:var(--danger);background:transparent;border-color:var(--border)}
+button.fn-icon-button{width:34px;padding:6px}button.fn-button:disabled{opacity:.45;cursor:default}
+button.fn-button:focus-visible,.fn-menu button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fn-menu{position:fixed;width:224px;z-index:5000;background:var(--bg-card);border:1px solid var(--border-light);border-radius:10px;box-shadow:0 12px 32px #191d1926;padding:5px;font-family:var(--font-ui)}
+.fn-menu button{display:flex;align-items:center;gap:10px;min-height:36px;width:100%;border:0;padding:8px 10px;border-radius:5px;font:inherit;font-size:13px;text-align:left;background:transparent;color:var(--text-primary);cursor:pointer}
+.fn-menu button:hover,.fn-menu button:focus-visible{background:var(--bg-hover)}.fn-menu button.danger{color:var(--danger)}.fn-menu button.separated{border-top:1px solid var(--border-light);border-top-left-radius:0;border-top-right-radius:0;margin-top:4px;padding-top:10px}.fn-menu button:disabled{opacity:.45;cursor:default}

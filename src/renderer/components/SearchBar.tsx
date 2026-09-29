@@ -1,26 +1,25 @@
 import { useMemo, useState } from 'react'
 import { useNotes } from '../context/NotesContext'
+import {parseNoteQuery} from '../../shared/note-filters'
+import {Button} from './ui/Controls'
 import '../styles/searchbar.css'
 
 export default function SearchBar(): JSX.Element {
   const { notes, searchKeyword, setSearchKeyword, filters, setFilters, clearFilters } = useNotes()
   const [expanded, setExpanded] = useState(false)
   const categories = useMemo(() => [...new Set(notes.map((note) => note.category).filter(Boolean))].sort(), [notes])
-  const tags = useMemo(() => [...new Set(notes.flatMap((note) => note.tags || []))].sort(), [notes])
+  const query=parseNoteQuery(searchKeyword)
   const activeCount = Number(!!filters.category) + Number(filters.favoriteOnly) + Number(!!filters.status) +
-    filters.tags.length + Number(!!filters.from) + Number(!!filters.to) + Number(filters.sort !== 'newest')
-  function toggleTag(tag: string): void {
-    setFilters({ ...filters, tags: filters.tags.includes(tag)
-      ? filters.tags.filter((item) => item !== tag) : [...filters.tags, tag] })
-  }
+    Number(!!filters.from) + Number(!!filters.to) + Number(filters.sort !== 'newest')
   return <div className="note-search">
     <div className="note-search-row">
-      <input type="search" aria-label="搜索笔记" placeholder="搜索标题、正文、摘要、分类与标签…"
+      <input type="search" aria-label="搜索笔记" aria-describedby="note-search-help" placeholder="搜索笔记，例如 #自行车 换轮胎"
         value={searchKeyword} onChange={(event) => setSearchKeyword(event.target.value)} />
-      <button type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+      <Button aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
         筛选{activeCount ? ` · ${activeCount}` : ''}
-      </button>
+      </Button>
     </div>
+    <p id="note-search-help" className="note-search-help">{query.tags.length?'标签 '+query.tags.map(t=>'#'+t).join('、')+(query.terms.length?'，同时包含 '+query.terms.join('、'):''):'输入 #标签 可与关键词组合搜索；多个条件需同时满足。'}</p>
     {expanded && <div className="note-filter-panel">
       <label>分类<select value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })}>
         <option value="">全部分类</option>
@@ -37,10 +36,6 @@ export default function SearchBar(): JSX.Element {
       </select></label>
       <label className="note-filter-check"><input type="checkbox" checked={filters.favoriteOnly}
         onChange={(event) => setFilters({ ...filters, favoriteOnly: event.target.checked })} />只看收藏</label>
-      {tags.length > 0 && <fieldset className="note-filter-tags"><legend>标签（所选标签之间按“或”匹配）</legend>
-        {tags.map((tag) => <label key={tag}><input type="checkbox" checked={filters.tags.includes(tag)}
-          onChange={() => toggleTag(tag)} />{tag}</label>)}
-      </fieldset>}
       <button className="note-filter-clear" type="button" onClick={clearFilters}>清除筛选</button>
     </div>}
   </div>

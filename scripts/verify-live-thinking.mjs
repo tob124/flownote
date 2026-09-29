@@ -43,7 +43,7 @@ try{
    corrections:view.corrections.map(c=>({claim:c.claim,replacement:c.replacement,status:c.status})),
    usage:view.insight?.usage}))
  if(view.jobs[0]?.status!=='done')process.exitCode=1
- await page.locator('#note-'+note).getByRole('button',{name:'展开',exact:true}).click()
+ await page.locator('#note-'+note).getByRole('button',{name:'AI 回应与讨论',exact:true}).click()
  if(mode==='research')await page.getByRole('dialog').getByRole('tab',{name:/延伸阅读/}).click()
  await page.screenshot({path:join(run,'live-comment.png'),fullPage:true})
 }finally{

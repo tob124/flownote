@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DreamReport, AiJob } from '../../shared/insights'
 import { useConfig } from '../context/ConfigContext'
 import ThoughtPanel from '../components/ThoughtPanel'
+import {Button} from '../components/ui/Controls'
 import MarkdownViewer from '../components/MarkdownViewer'
 import '../styles/thinking.css'
 export default function DreamPage():JSX.Element{
@@ -42,8 +43,7 @@ export default function DreamPage():JSX.Element{
   const entries=[...new Set([...jobs.map(j=>j.owner.id),...reports.map(r=>r.id)])]
   return <div className="dream-workspace">
     <header className="dream-topbar"><strong>Dream</strong><span>让记录长出新的认识</span>
-      <button disabled={starting||!!current} onClick={()=>void start()}>{current?'正在思考…':'开始 Dream'}</button>
-      {current && <button onClick={()=>{setSelection({kind:'new',id:current.owner.id});++oldSeq.current}}>查看进度</button>}
+      {current?<Button variant="secondary" onClick={()=>{setSelection({kind:'new',id:current.owner.id});++oldSeq.current}}>查看进度</Button>:<Button variant="primary" disabled={starting} onClick={()=>void start()}>开始 Dream</Button>}
     </header>
     {error && <p role="alert">{error} <button onClick={()=>void reload()}>重试</button></p>}
     <div className="dream-columns"><nav className="dream-history" aria-label="Dream 历史">
@@ -57,7 +57,7 @@ export default function DreamPage():JSX.Element{
         selection?.kind==='old'?<MarkdownViewer content={oldText}/>:
         <div className="dream-empty"><h2>从记录中，找值得再想一层的问题</h2>
           <p>Dream 会给出有理由的判断，连接相关笔记，并寻找能补充或挑战这些想法的书籍与外部观点。</p>
-          <p>你可以围绕报告继续追问。材料不足时，不会强行归纳或凑书单。</p><button onClick={()=>void start()} disabled={starting||!!current}>开始一次思考</button></div>}
+          <p>从右上角开始一次思考，或在左侧打开过去的报告。</p></div>}
     </main></div>
   </div>
 }

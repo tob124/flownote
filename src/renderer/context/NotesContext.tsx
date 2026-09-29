@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react'
 import type { Note } from '../../shared/types'
-import { EMPTY_NOTE_FILTERS, filterNotes, type NoteFilters } from '../../shared/note-filters'
+import { EMPTY_NOTE_FILTERS, filterNotes, searchNotes, type NoteFilters } from '../../shared/note-filters'
 import { newestFirst } from '../../shared/note-time'
 import { useConfig } from './ConfigContext'
 interface NotesCtx {
@@ -74,9 +74,7 @@ export function NotesProvider({children}:{children:ReactNode}):JSX.Element {
   },[dir,loadNotes])
   const revealNote=useCallback((id:string)=>{setSearchKeyword('');setFilters(EMPTY_NOTE_FILTERS);setFocusId(id);void loadNotes()},[loadNotes])
   const filteredNotes=useMemo(()=>{
-    const key=searchKeyword.trim().toLocaleLowerCase()
-    const matching=key ? notes.filter(n=>[n.title,n.raw_content,n.summary,n.category,...(n.tags||[])].join('\n').toLocaleLowerCase().includes(key)) : notes
-    return filterNotes(matching,filters)
+    return filterNotes(searchNotes(notes,searchKeyword),filters)
   },[notes,searchKeyword,filters])
   return <NotesContext.Provider value={{notes,filteredNotes,searchKeyword,filters,setFilters,clearFilters:()=>setFilters(EMPTY_NOTE_FILTERS),
     isLoading,isRefreshing,error,setSearchKeyword,loadNotes,addNote,deleteNote,savedId,focusId,revealNote}}>{children}</NotesContext.Provider>
