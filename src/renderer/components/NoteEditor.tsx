@@ -3,6 +3,7 @@ import { useDraftGuard } from '../utils/useDraftGuard'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkLineBreaks from '../utils/remark-line-breaks'
 import type { Note, NotePatch } from '../../shared/types'
 import { useConfig } from '../context/ConfigContext'
 import { clearNoteDraft, freshNoteDraft, loadNoteDraft, saveNoteDraft } from '../utils/note-draft'
@@ -139,13 +140,13 @@ export default function NoteEditor({ note, onRefresh, scrollTop=0, onScroll }: P
             <label>摘要<textarea rows={2} maxLength={2000} value={draft.summary} onChange={(event) => setDraft((value) => ({ ...value, summary: event.target.value }))} /></label>
             <label>标签（用逗号分隔）<input value={draft.tags} onChange={(event) => setDraft((value) => ({ ...value, tags: event.target.value }))} /></label></details>
             <div className="note-edit-tabs"><button className={!preview ? 'active' : ''} type="button" onClick={() => setPreview(false)}>编辑正文</button><button className={preview ? 'active' : ''} type="button" onClick={() => setPreview(true)}>预览</button></div>
-            {preview ? <div className="note-edit-preview markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.raw_content}</ReactMarkdown></div> :
+            {preview ? <div className="note-edit-preview markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm, remarkLineBreaks]}>{draft.raw_content}</ReactMarkdown></div> :
               <textarea className="note-edit-body" aria-label="笔记正文" rows={14} maxLength={1000000} value={draft.raw_content} onChange={(event) => setDraft((value) => ({ ...value, raw_content: event.target.value }))} />}
             <div className="editor-actions"><Button variant="primary" type="submit" disabled={saving}>保存修改</Button><span className="editor-hint">关闭后，本机草稿仍会保留</span></div>
           </form>
         ) : <>
           <details className="note-properties"><summary>笔记信息</summary><p>{viewNote.category}</p>{viewNote.summary && <p>{viewNote.summary}</p>}<p>{viewNote.tags?.map(t=>'#'+t).join(' ')}</p></details>
-          <div className="note-detail-content markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{viewNote.raw_content}</ReactMarkdown></div>
+          <div className="note-detail-content markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm, remarkLineBreaks]}>{viewNote.raw_content}</ReactMarkdown></div>
 
           <AttachmentList note={viewNote} onSaved={setViewNote} onRefresh={onRefresh} onNotify={notify} />
         </>}

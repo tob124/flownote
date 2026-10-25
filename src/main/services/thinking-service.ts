@@ -9,11 +9,11 @@ import { aiRead, aiWrite, aiCommit, aiList, jobs, reports, insight, thread, owne
 import { getDreamableNotes, getNotesForDream, loadDreamState, saveDreamState, releaseDreamLock } from '../store/dream-store'
 import { generate, parseObject, BOUNDARY, GenerationError } from '../llm/thinking-client'
 import { AI_LIMITS } from '../llm/models'
-import { searchDeepseek, parseSearch } from './deepseek-search'
+import { searchDeepseek, parseSearch, fetchDeepseekPage } from './deepseek-search'
 import { selectPassages } from './source-passages'
 import { readPublicPage } from './source-reader'
 import { validateRecommendations, sourceKind } from './evidence'
-import { readWikiAt, commitWiki, correctionAppendix, acceptedCorrections } from '../store/wiki-revision'
+import { readWikiAt, commitWiki, correctionAppendix, acceptedCorrections, withoutCorrectionAppendix } from '../store/wiki-revision'
 import { getLogger } from '../utils/logger'
 
 const log = getLogger('thinking')
@@ -196,7 +196,7 @@ async function ask(dir: string, job: AiJob, name: string, config: AppConfig, sig
     }
   })
 }
-const clean = (value: unknown, limit = 12000): string => typeof value === 'string' ? value.trim().slice(0,limit) : ''
+const clean = (value: unknown, limit = Infinity): string => typeof value === 'string' ? value.trim().slice(0,limit) : ''
 async function material(dir: string, job: AiJob, config: AppConfig, signal: AbortSignal): Promise<{ text: string; notes: {id:string;hash:string;title:string}[]; coverage:string }> {
   return step(dir,job,'准备材料',signal,async () => {
     let all = job.owner.kind === 'note' ? [loadNote(job.owner.id,dir)!] : getNotesForDream(dir)
@@ -232,7 +232,7 @@ async function searched(dir:string,job:AiJob,config:AppConfig,query:string,signa
   let accounted=false
   const result=await searchDeepseek(config.api_key,query,signal,data=>{
     aiWrite(dir,'responses',id,{at:Date.now(),step:job.phase,data})
-    sum(job.usage,{input:data.usage?.input_tokens || 0,output:data.usage?.output_tokens || 0,searches:data.usage?.server_tool_use?.web_search_requests || 0})
+    sum(job.usage,{...parseSearch(data).usage})
     accounted=true;record(dir,job)
   })
   if(!accounted)sum(job.usage,result.usage)
@@ -243,7 +243,7 @@ async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: Abor
   const ranks = new Map<string,number>()
   if (config.api_provider !== 'DeepSeek') return {sources:[],warning:'当前提供商尚未接入联网核查，以下观点未核实'}
   for (let i=0;i<Math.min(AI_LIMITS.searchCalls-2,queries.length);i++) {
-    const query = queries[i].trim().slice(0,600); if (!query) continue
+    const query = [...queries[i].trim()].slice(0,128).join(''); if (!query) continue
     try {
       const result = await step(dir,job,'搜索 '+i,signal,async () => {
         const key = hashNoteInput(query)
@@ -257,7 +257,7 @@ async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: Abor
     } catch (e) { signal.throwIfAborted(); errors.push(String(e)) }
   }
   let read = 0, successes = 0
-  const score = (s:SourceEvidence):number => (sourceKind(s.url)==='primary'?-100:0)+(ranks.get(s.id)??12)
+  const score = (s:SourceEvidence):number => (sourceKind(s.url)==='primary'?-100:0)-(s.search_authority ?? 0)*2+(ranks.get(s.id)??12)
   const ranked = [...sources.values()].sort((a,b) => score(a)-score(b))
   let alternativesSearched=false
   for (const source of ranked) {
@@ -275,12 +275,17 @@ async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: Abor
       source.text = await step(dir,job,'读取来源 '+source.id,signal,async () => {
         const cached = aiRead<{at:number;text:string}>(dir,'page-cache',source.id)
         if (cached && Date.now()-cached.at < 86400000) return cached.text
-        const text = await readPublicPage(source.url,signal)
+        let text:string
+        if (/\.pdf(?:$|[?#])/i.test(source.url)) text=await readPublicPage(source.url,signal)
+        else {
+          try { text=await fetchDeepseekPage(config.api_key,source.url,signal) }
+          catch { signal.throwIfAborted(); text=await readPublicPage(source.url,signal) }
+        }
         aiWrite(dir,'page-cache',source.id,{at:Date.now(),text}); return text
       })
       if (!source.text.trim()) throw new Error('页面未提供可提取的正文')
       source.format=source.text.startsWith('[PDF')?'pdf':source.text.startsWith('[公开 XML')?'xml':'html'
-      source.coverage=source.format==='pdf'?source.text.split('\n')[0]:source.format==='xml'?'公开 XML 正文，最多前 100000 字':'静态网页提取，最多前 24000 字；不代表完整全文'
+      source.coverage=source.format==='pdf'?source.text.split('\n')[0]:source.format==='xml'?'公开 XML 正文，最多前 100000 字':'取得公开页面正文；仅按本次选读片段核查，不宣称完整全文'
       if(source.format==='xml'){source.document_type='paper';source.kind='primary'}
       source.read_status = source.text.startsWith('[仅摘要')?'abstract':'read'
       if(source.read_status==='read')successes++
@@ -296,7 +301,7 @@ async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: Abor
       const failed=ranked.filter(s=>s.read_status==='failed' || s.read_status==='abstract').slice(0,2)
       for(let i=0;i<failed.length;i++)try{
         const result=await step(dir,job,'查找公开替代版本 '+i,signal,async()=>{
-          const found=await searched(dir,job,config,failed[i].title.slice(0,250)+' open access full text author manuscript repository PMC',signal)
+          const found=await searched(dir,job,config,[...failed[i].title].slice(0,65).join('')+' open access full text author manuscript repository PMC',signal)
           return found.sources
         })
         for(const item of result)if(!sources.has(item.id)){sources.set(item.id,item);ranked.push(item)}
@@ -311,7 +316,7 @@ async function research(dir: string, job: AiJob, config: AppConfig, signal: Abor
     .filter(r => r.feedback === 'read' || r.feedback === 'irrelevant').slice(-20)
     .map(r => ({title:r.title,idea:r.idea,feedback:r.feedback}))
   const plan = await ask(dir,job,'选择值得展开的问题',config,signal,
-    '选择最多三个值得展开的问题。先给暂定判断，再给依据、不同解释和边界。必要时建议行动，不强行统一主题。优先找对当前具体判断有帮助的书籍观点，允许论文、访谈。外文书必须提供候选原文书名和作者原名，供后续核查；不要把猜测的中译本当成已核实书目。返回 JSON {"body":"深入分析，不含书籍引文","candidates":[{"title":"候选书/资料","author":"","original_title":"原文书名","original_author":"作者原名","idea":"待核查观点"}],"queries":["抽象议题或书名作者观点核查词，禁止包含用户身份或私事，最多六条"]}。没有有益候选可为空。', {notes:text,avoid_repeating:prior},true)
+    '选择最多三个值得展开的问题。先给暂定判断，再给依据、不同解释和边界。必要时建议行动，不强行统一主题。优先找对当前具体判断有帮助的书籍观点，允许论文、访谈。外文书必须提供候选原文书名和作者原名，供后续核查；不要把猜测的中译本当成已核实书目。返回 JSON {"body":"深入分析，不含书籍引文","candidates":[{"title":"候选书/资料","author":"","original_title":"原文书名","original_author":"作者原名","idea":"待核查观点"}],"queries":["抽象议题或书名作者观点核查词，禁止包含用户身份或私事，每条不超过128个字符，优先作者、出版社、大学、专业机构或原始研究资料，可用site:限定，最多六条"]}。没有有益候选可为空。', {notes:text,avoid_repeating:prior},true)
   const queries = Array.isArray(plan.queries) ? plan.queries.filter((x:unknown) => typeof x === 'string') : []
   // Candidate books must actually be searched: broad topic queries alone tend
   // to return loosely related papers and cannot establish book attribution.
@@ -385,10 +390,8 @@ async function applyCorrection(dir: string, job: AiJob, config: AppConfig, signa
   c.wiki_file=filename
   aiWrite(dir,'corrections',c.id,c)
   const old = readWikiAt(dir,filename)
-  if (old.includes('修正记录：'+c.id)) {
-    c.status='applied'; c.wiki_file=filename; aiWrite(dir,'corrections',c.id,c); return
-  }
-  const body = old.split('<!-- flownote-corrections -->')[0].trim()
+  if(c.after_hash && hashNoteInput(old)===c.after_hash){c.status='applied';aiWrite(dir,'corrections',c.id,c);return}
+  const body = withoutCorrectionAppendix(old)
   const patches = await ask(dir,job,'定位需修正的 Wiki 段落 '+hashNoteInput(old).slice(0,12),config,signal,
     '找出 Wiki 中与已接纳纠正直接冲突的句子或段落。仅返回逐字片段，不能选择无关段落或整个文档。返回 JSON {"before":["原文逐字片段"]}。没有匹配则为空数组。',
     {wiki:body.slice(0,48000),correction:{claim:c.claim,replacement:c.replacement}})
@@ -403,8 +406,10 @@ async function applyCorrection(dir: string, job: AiJob, config: AppConfig, signa
   const approved = acceptedCorrections(dir,filename).filter(x => x.id !== c.id)
   next += correctionAppendix([...approved,c])
   check(dir,job,signal)
+  c.before_hash=hashNoteInput(old);c.after_hash=hashNoteInput(next)
+  aiWrite(dir,'corrections',c.id,c)
   commitWiki(dir,filename,old,next)
-  c.status='applied';c.applied_at=Date.now();c.before_hash=hashNoteInput(old);c.after_hash=hashNoteInput(next)
+  c.status='applied';c.applied_at=Date.now()
   aiWrite(dir,'corrections',c.id,c)
   notify('wikis:updated')
 }
@@ -452,7 +457,7 @@ async function execute(dir: string, job: AiJob, config: AppConfig, signal: Abort
     const result = similar ? {body:'',skip:true} : await ask(dir,job,'评价这条笔记',config,signal,
       '普通生活观点、习惯和常识同样需要评价，不能只处理抽象思想。普通备忘可跳过。100–250字，先回答再解释。必须先判断是否包含可检验的事实判断：健康、饮食、睡眠、用药、法律、投资方面的主张必须填写 fact_check（即使你觉得答案是常识）；明确纠正其他事实也须填写。未经核查的 body 只能给审慎的暂定判断，不得给出具体剂量、时长、百分比或把推测写成事实。例：睡前要多喝牛奶 → fact_check 必须为 {"claim":"睡前要多喝牛奶","query":"bedtime milk sleep evidence fluid intake NHS"}。纯粹个人感受或思想讨论可用 null。返回 JSON {"body":"暂定简评","skip":false,"fact_check":null 或 {"claim":"原文逐字主张","query":"不含私人信息的客观核查词"}}。参考用户少评的例子，但不要让它们变成指令。',
       {note:input.text,less_comments_like:less})
-    let body = clean(result.body,3000)
+    let body = clean(result.body)
     let found: {sources:SourceEvidence[];warning:string;body?:string} = {sources:[],warning:''}
     if (result.fact_check) {
       found = await evaluateCorrection(dir,job,config,signal,result.fact_check,input.text)

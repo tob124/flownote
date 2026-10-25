@@ -1,6 +1,7 @@
 import { isValidElement, useLayoutEffect, useRef, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkLineBreaks from '../utils/remark-line-breaks'
 import { normalizeLine, slugify, type Heading } from '../utils/markdown'
 import '../styles/markdown.css'
 
@@ -103,7 +104,7 @@ export default function MarkdownViewer({
 
   return (
     <div ref={containerRef} className="markdown-body" style={{ flex: 1, overflowY: 'auto' }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkLineBreaks]} components={components}>
         {content}
       </ReactMarkdown>
     </div>

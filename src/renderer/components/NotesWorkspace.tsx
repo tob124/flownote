@@ -26,6 +26,12 @@ function Workspace({ dir, onTrash }: { dir: string; onTrash: () => void }): JSX.
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [available, setAvailable] = useState(window.innerWidth - 64)
   const [notice, setNotice] = useState('')
+  const [noticeVersion, setNoticeVersion] = useState(0)
+  useEffect(() => {
+    if (!notice) return
+    const timer = setTimeout(() => setNotice(''), 3500)
+    return () => clearTimeout(timer)
+  }, [notice, noticeVersion])
   const [confirmDelete, setConfirmDelete] = useState(false)
   const scrollTimer=useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(()=>()=>{if(scrollTimer.current)clearTimeout(scrollTimer.current);writeWorkspace(dir,prefsRef.current)},[dir])
@@ -168,11 +174,11 @@ function Workspace({ dir, onTrash }: { dir: string; onTrash: () => void }): JSX.
           ]}/></>}
       </header>
       {error && <p className="workspace-notice" role="alert">{error} <Button onClick={() => void loadNotes()}>重试</Button></p>}
-      {notice && <p className="workspace-notice" role="status">{notice}{notice.includes('清除筛选') && selected && <Button onClick={()=>{revealNote(selected);setNotice('')}}>清除筛选并定位</Button>}</p>}
+      {notice && <p className="workspace-notice" role="status"><span>{notice}</span><Button variant="quiet" aria-label="关闭提示" onClick={()=>setNotice('')}>关闭</Button>{notice.includes('清除筛选') && selected && <Button onClick={()=>{revealNote(selected);setNotice('')}}>清除筛选并定位</Button>}</p>}
       {savedId && !filteredNotes.some(n => n.id === savedId) && <p className="workspace-notice" role="status">已保存，当前筛选未显示这条笔记。<Button variant="quiet" onClick={() => revealNote(savedId)}>查看笔记</Button></p>}
       {confirmDelete && <div className="workspace-notice" role="group" aria-label="删除确认">将这条笔记移至回收站？<Button variant="danger" onClick={() => { if (mayLeave()) void deleteNote(note!.id).then(ok => { if (ok) { setConfirmDelete(false); setSelected(null); setAi(false) } }) }}>确认移除</Button><Button onClick={() => setConfirmDelete(false)}>取消</Button></div>}
       <div className={'workspace-document' + (prefs.wide ? ' is-wide' : '')}>
-        {creating || (!note && !notes.length && !isLoading) ? <QuickInput workspace onSaved={(id, warning) => { setSelected(id); update({ selected: id }); setCreating(false); setNotice(warning || '笔记已保存') }}/>
+        {creating || (!note && !notes.length && !isLoading) ? <QuickInput workspace onSaved={(id, warning) => { setSelected(id); update({ selected: id }); setCreating(false); setNotice(warning || '笔记已保存'); setNoticeVersion(v=>v+1) }}/>
           : note ? <NoteEditor key={dir + ':' + note.id} note={note} onClose={() => {}} onRefresh={() => void loadNotes()} scrollTop={prefsRef.current.scroll[note.id] || 0} onScroll={top => recordScroll({ scroll: { ...prefsRef.current.scroll, [note.id]: top } })}/>
           : <div className="workspace-empty"><h2>选一条笔记，继续阅读</h2><p>或开始记录一个新的想法。</p><Button onClick={newNote}>新建笔记</Button></div>}
       </div>

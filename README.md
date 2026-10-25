@@ -1,3 +1,7 @@
+# FlowNote 3.0.1
+
+本轮修复及反馈按钮说明见 [3.0.1 修复说明](docs/RELEASE-3.0.1.md)。Windows 检查通过后自动编译并发布安装包：[下载最新版](https://github.com/tob124/flownote/releases/latest)。
+
 # FlowNote
 
 个人知识管理工具 — "冥想盆" (Pensieve)。快速捕获灵感笔记，AI 自动分类/打标签，每月 AI 生成精选 Wiki 页面，支持"Dream"知识整合洞察。

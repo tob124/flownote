@@ -1,52 +1,58 @@
 import { createHash } from 'crypto'
 import type { SourceEvidence, Usage } from '../../shared/insights'
 import { limited } from '../llm/request-limit'
-import { AI_MODELS, AI_LIMITS } from '../llm/models'
 import { sourceUrl } from './source-reader'
 
+// Official schema: https://api-docs.deepseek.com/guides/search/
 export function parseSearch(data: any): { sources: SourceEvidence[]; usage: Usage } {
-  const blocks = Array.isArray(data.content) ? data.content : []
-  const results = blocks.filter((b:any) => b.type === 'web_search_tool_result')
-  if (!results.length) throw new Error('搜索未返回结构化来源，本次未完成核查')
-  const snippets = new Map<string,string>()
-  for (const b of blocks) for (const c of b.citations ?? []) {
-    if (typeof c.url === 'string' && typeof c.cited_text === 'string') snippets.set(c.url,c.cited_text)
-  }
+  const native = Array.isArray(data?.results)
+  // Read old persisted responses so interrupted jobs remain recoverable.
+  const legacy = Array.isArray(data?.content) ? data.content.filter((b:any)=>b.type==='web_search_tool_result') : []
+  if (!native && !legacy.length) throw new Error('搜索未返回结构化来源，本次未完成核查')
+  const items = native ? data.results : legacy.flatMap((b:any)=>Array.isArray(b.content)?b.content:[])
   const sources = new Map<string,SourceEvidence>()
-  for (const b of results) {
-    if (!Array.isArray(b.content)) continue
-    for (const item of b.content) {
-      if (item.type !== 'web_search_result' || typeof item.url !== 'string') continue
-      try {
-        const url = sourceUrl(item.url); url.hash = ''
-        sources.set(url.href, {
-          id: createHash('sha256').update(url.href).digest('hex').slice(0,20),
-          url: url.href, title: String(item.title ?? '').slice(0,500), fetched_at: Date.now(),
-          text: '', excerpt: snippets.get(item.url)?.slice(0,2000), kind: 'unknown'
-        })
-      } catch { /* Reject non-web links. */ }
-    }
-  }
-  if (!sources.size) throw new Error('未检索到可用来源')
-  return { sources: [...sources.values()].slice(0,12), usage: {
-    input: data.usage?.input_tokens ?? 0, output: data.usage?.output_tokens ?? 0,
-    searches: data.usage?.server_tool_use?.web_search_requests ?? 0
-  } }
-}
-export async function searchDeepseek(key: string, query: string, signal: AbortSignal, onResponse?: (data:any)=>void): Promise<ReturnType<typeof parseSearch>> {
-  return limited(async () => {
-    const response = await fetch('https://api.deepseek.com/anthropic/v1/messages', {
-      method: 'POST', redirect:'error', signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]),
-      headers: { 'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01' },
-      body: JSON.stringify({
-        model: AI_MODELS.deepseek, max_tokens: 2000,
-        messages: [{ role:'user', content:'Run one focused web search for the query below. Prefer author, publisher, university or professional institution pages, open-access publisher papers, author manuscripts, institutional repositories and PMC with readable HTML, XML or text PDF. Avoid login-only sources. Keep the target population and subject of the query; do not substitute a narrower group such as children or patients without reason. Return sources briefly; do not research additional topics or answer the underlying question. Query: ' + query.slice(0,600) }],
-        tools: [{ type:'web_search_20250305', name:'web_search', max_uses:AI_LIMITS.serverSearches }]
+  for (const item of items) {
+    if (!item || typeof item.url !== 'string' || (!native && item.type!=='web_search_result')) continue
+    try {
+      const url=sourceUrl(item.url); url.hash=''
+      sources.set(url.href, {
+        id:createHash('sha256').update(url.href).digest('hex').slice(0,20),
+        url:url.href,title:typeof item.title==='string'?item.title.slice(0,500):'',fetched_at:Date.now(),
+        // Search summaries and authority scores cannot establish an attribution.
+        text:'',excerpt:typeof item.snippet==='string'?item.snippet:undefined,kind:'unknown',
+        ...(native ? {search_authority:item.authority,search_score:item.rerank_score} : {})
       })
+    } catch { /* Reject unsafe/non-web URLs. */ }
+  }
+  return {sources:[...sources.values()].slice(0,12),usage:native?{input:0,output:0,searches:1}:{
+    input:data.usage?.input_tokens??0,output:data.usage?.output_tokens??0,
+    searches:data.usage?.server_tool_use?.web_search_requests??0
+  }}
+}
+export function searchQuery(query:string):string {
+  const normalized=query.trim()
+  if(!normalized || [...normalized].length>128)throw new Error('搜索词需为 1–128 个字符，请缩短查询')
+  return normalized
+}
+async function request(key:string,tool:'search'|'fetch',body:unknown,signal:AbortSignal):Promise<any> {
+  if(!key)throw new Error('请先配置 DeepSeek API Key')
+  return limited(async()=>{
+    const response=await fetch('https://api.deepseek.com/v1/tools/'+tool,{
+      method:'POST',redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(90000)]),
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(body)
     })
-    if (!response.ok) throw new Error('联网搜索失败（' + response.status + '）')
-    const data=await response.json()
-    onResponse?.(data)
-    return parseSearch(data)
-  }, signal)
+    if(!response.ok)throw new Error('DeepSeek '+(tool==='search'?'搜索':'正文抓取')+'失败（'+response.status+'）')
+    return response.json()
+  },signal)
+}
+export async function searchDeepseek(key:string,query:string,signal:AbortSignal,onResponse?:(data:any)=>void):Promise<ReturnType<typeof parseSearch>> {
+  const data=await request(key,'search',{query:searchQuery(query),count:12,need_content:false},signal)
+  onResponse?.(data)
+  return parseSearch(data)
+}
+export async function fetchDeepseekPage(key:string,url:string,signal:AbortSignal):Promise<string> {
+  const safe=sourceUrl(url)
+  const data=await request(key,'fetch',{url:safe.href},signal)
+  if(typeof data?.content!=='string' || !data.content.trim())throw new Error('未取得可核对的页面正文')
+  return data.content
 }

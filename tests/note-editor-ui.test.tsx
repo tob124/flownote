@@ -87,3 +87,20 @@ it('blocks navigation when local draft storage fails', async () => {
   expect(screen.getByText(/本机草稿无法保存/)).toBeTruthy()
   failure.mockRestore()
 })
+
+it('preserves natural line breaks through save, AI metadata updates and preview', async () => {
+  const {dir,id}=setup()
+  const text='第一行\n第二行\n\n另一段\n最后一行'
+  const note=patchNote(dir,id,1,{raw_content:text})
+  const {container,rerender}=render(<NoteDetailDialog note={note} onClose={()=>{}}/>)
+  expect(container.querySelectorAll('.note-detail-content br')).toHaveLength(2)
+  expect(loadNote(id,dir)?.raw_content).toBe(text)
+  const {applyAiPatch,hashNoteInput}=await import('../src/main/store/note-store')
+  applyAiPatch(dir,id,hashNoteInput(text),{title:'AI标题',ai_status:'done'})
+  rerender(<NoteDetailDialog note={loadNote(id,dir)!} onClose={()=>{}}/>)
+  expect(container.querySelectorAll('.note-detail-content br')).toHaveLength(2)
+  expect(loadNote(id,dir)?.raw_content).toBe(text)
+  await userEvent.click(screen.getByRole('button',{name:'编辑笔记'}))
+  await userEvent.click(screen.getByRole('button',{name:'预览',exact:true}))
+  expect(container.querySelectorAll('.note-edit-preview br')).toHaveLength(2)
+})
