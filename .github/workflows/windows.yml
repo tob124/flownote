@@ -27,15 +27,13 @@ jobs:
       - run: node --test scripts/publish-release.test.mjs
       - run: npm run test:e2e
       - run: npm run package:win
-      - uses: actions/upload-artifact@v4
-        with:
-          name: FlowNote-Windows-x64
-          path: release/*Setup-x64.exe
-          if-no-files-found: error
   publish:
     needs: windows
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    env:
+      npm_config_registry: https://registry.npmjs.org/
+      npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
     permissions:
       contents: write
     steps:
@@ -45,10 +43,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
-        with:
-          name: FlowNote-Windows-x64
-          path: release
+      - name: Build the checked commit for release
+        run: |
+          git config --global url.https://github.com/.insteadOf ssh://git@github.com/
+          npm ci
+          npm run package:win
       - run: node scripts/publish-release.mjs
         env:
           GH_TOKEN: ${{ github.token }}
