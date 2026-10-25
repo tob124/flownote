@@ -1,6 +1,6 @@
 {
   "name": "flownote",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "FlowNote - Personal Knowledge Management Tool",
   "author": "FlowNote",
   "main": "./out/main/index.js",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test:run": "vitest run",
     "preview": "electron-vite preview",
-    "package:win": "electron-vite build && npm prune --omit=dev && npm i --save-dev --no-audit --no-fund electron@30.5.1 electron-builder@26.8.1 && npx electron-builder --win && npm install",
+    "package:win": "electron-vite build && electron-builder --win nsis --x64 --publish never",
     "package:mac": "electron-vite build && npm prune --omit=dev && npm i --save-dev --no-audit --no-fund electron@30.5.1 electron-builder@26.8.1 && npx electron-builder --mac && npm install",
     "package:linux": "electron-vite build && npm prune --omit=dev && npm i --save-dev --no-audit --no-fund electron@30.5.1 electron-builder@26.8.1 && npx electron-builder --linux && npm install",
     "start": "electron-forge start",

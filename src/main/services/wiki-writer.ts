@@ -1,4 +1,4 @@
-import { readWikiAt, commitWiki, acceptedCorrections, correctionAppendix } from '../store/wiki-revision'
+import { readWikiAt, commitWiki, acceptedCorrections, correctionAppendix, withoutCorrectionAppendix } from '../store/wiki-revision'
 import { loadWiki, saveWiki } from '../store/wiki-store'
 import { callLlm } from '../llm/llm-client'
 import { WIKI_PROMPT } from '../llm/prompts'
@@ -213,7 +213,7 @@ export async function generateWiki(
   }
 
   if (getSyncDir() !== syncDir) return
-  newMd = newMd.split('<!-- flownote-corrections -->')[0].trim() + correctionAppendix(acceptedCorrections(syncDir,filename))
+  newMd = withoutCorrectionAppendix(newMd) + correctionAppendix(acceptedCorrections(syncDir,filename))
   commitWiki(syncDir,filename,rawSummary,newMd)
   log.info(`Wiki saved for ${category}_${month}`)
 }

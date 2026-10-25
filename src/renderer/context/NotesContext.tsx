@@ -29,6 +29,7 @@ export function NotesProvider({children}:{children:ReactNode}):JSX.Element {
   const [isRefreshing,setRefreshing]=useState(false)
   const [error,setError]=useState<string|null>(null)
   const [savedId,setSavedId]=useState<string|null>(null)
+  useEffect(()=>{if(!savedId)return;const timer=setTimeout(()=>setSavedId(null),3500);return()=>clearTimeout(timer)},[savedId])
   const [focusId,setFocusId]=useState<string|null>(null)
   const [focusRequest,setFocusRequest]=useState(0)
   const sequence=useRef(0)

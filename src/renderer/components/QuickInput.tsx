@@ -44,6 +44,8 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   const [sending, setSending] = useState(false)
   const [listening, setListening] = useState(false)
   const [polishing, setPolishing] = useState(false)
+  const [polishStatus, setPolishStatus] = useState('')
+  useEffect(()=>{if(polishing || !polishStatus)return;const timer=setTimeout(()=>setPolishStatus(''),3500);return()=>clearTimeout(timer)},[polishing,polishStatus])
   const [error, setError] = useState<string | null>(null)
   const [pendingFiles, setPendingFiles] = useState<NoteFile[]>(Array.isArray(initial.files)?initial.files:[])
   const [attaching, setAttaching] = useState(false)
@@ -62,7 +64,7 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   useEffect(()=>{if(!sending&&!attaching&&!polishing&&!listening) persist()},[text,pendingFiles])
   async function saveNote(): Promise<void> {
     const trimmed = text.trim()
-    if (!trimmed || sending) return
+    if (!trimmed || sending || polishing) return
     setSending(true)
     setError(null)
     const id = await addNote(trimmed)
@@ -176,16 +178,20 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   }
 
   async function handlePolish(): Promise<void> {
-    if (!text.trim() || polishing) return
+    if (!text.trim() || polishing || sending || listening) return
     setPolishing(true)
+    setPolishStatus('AI 正在润色…')
     setError(null)
     try {
       const result = await window.api.polish(text)
-      if (result) setText(result)
+      if (!alive.current) return
+      if (!result?.trim()) { setPolishStatus(''); setError('润色失败，AI 未返回内容；原文已保留'); return }
+      setText(result)
+      setPolishStatus(result === text ? 'AI 润色完成，文字无需调整' : 'AI 润色完成，请核对后保存')
     } catch {
-      setError('润色失败，请稍后重试')
+      if(alive.current){setPolishStatus('');setError('润色失败，原文已保留，请稍后重试')}
     } finally {
-      setPolishing(false)
+      if(alive.current)setPolishing(false)
     }
   }
 
@@ -197,7 +203,7 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
       <label className="composer-label" htmlFor="quick-note">{workspace?'新建笔记':'写下一条记录'}</label>
       <textarea id="quick-note" className={'quick-input'+(expanded&&!workspace?' expanded':'')}
         placeholder="此刻有什么值得记下来？" value={text} onChange={e=>setText(e.target.value)}
-        onKeyDown={e=>void handleKeyDown(e)} disabled={sending} rows={3}/>
+        onKeyDown={e=>void handleKeyDown(e)} disabled={sending||polishing} aria-busy={polishing} rows={3}/>
       {pendingFiles.length>0 && <div className="quick-input-pending">
         {pendingFiles.map((f,i)=><span className="quick-input-file-chip" key={f.storedName+i}><Icon name="clip"/>{f.name}
           <button aria-label={'移除附件 '+f.name} onClick={()=>setPendingFiles(prev=>prev.filter((_,idx)=>idx!==i))}>×</button>
@@ -208,16 +214,17 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
           <Button variant="quiet" icon="clip" onClick={()=>void handleAttach()} disabled={attaching}>添加附件</Button>
           <ActionMenu label="输入工具" items={[
             ...(!workspace?[{label:expanded?'收起编辑区':'展开编辑区',icon:'expand' as const,onSelect:()=>setExpanded(v=>!v)}]:[]),
-            {label:listening?'停止语音输入':'语音输入',icon:'mic',disabled:!speechSupported,onSelect:toggleListening},
-            {label:polishing?'正在润色…':'润色文字',icon:'spark',disabled:!polishEnabled||polishing,onSelect:()=>void handlePolish()}
+            {label:listening?'停止语音输入':'语音输入',icon:'mic',disabled:!speechSupported||polishing||sending,onSelect:toggleListening},
+            {label:polishing?'正在润色…':'润色文字',icon:'spark',disabled:!polishEnabled||polishing||sending||listening,onSelect:()=>void handlePolish()}
           ]}/>
           {listening && <span role="status" className="quick-input-listening">正在聆听…</span>}
         </div>
         <div className="composer-save">
           <span className="quick-input-hint">{text.length?text.length+' 字 · ':''}Alt + Enter</span>
-          <Button variant="primary" onClick={()=>void saveNote()} disabled={!text.trim()||sending}>{sending?'正在保存…':'保存笔记'}</Button>
+          <Button variant="primary" onClick={()=>void saveNote()} disabled={!text.trim()||sending||polishing}>{sending?'正在保存…':'保存笔记'}</Button>
         </div>
       </div>
+      {polishStatus && <p className="quick-input-polish-status" role="status" aria-live="polite">{polishStatus}</p>}
       {savedId && <div className="composer-receipt" role="status"><span>已保存到笔记</span><Button variant="quiet" onClick={()=>revealNote(savedId)}>查看笔记</Button></div>}
       {error && <div role="alert" className="quick-input-error">{error}</div>}
     </div>

@@ -1,0 +1,51 @@
+name: Windows checks, installer and release
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      npm_config_registry: https://registry.npmjs.org/
+      npm_config_electron_mirror: https://github.com/electron/electron/releases/download/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:run
+      - run: node --test scripts/publish-release.test.mjs
+      - run: npm run test:e2e
+      - run: npm run package:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FlowNote-Windows-x64
+          path: release/*Setup-x64.exe
+          if-no-files-found: error
+  publish:
+    needs: windows
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: FlowNote-Windows-x64
+          path: release
+      - run: node scripts/publish-release.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}

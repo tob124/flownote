@@ -135,6 +135,8 @@ describe('persistent thinking workflow',()=>{
     const wiki=readFileSync(join(env.dir,'wikis',applied.wiki_file!),'utf8')
     expect(wiki).toContain('接纳后的有条件表述')
     expect(wiki).toContain('https://example.org/source')
+    expect(wiki).not.toContain('flownote-corrections')
+    expect(wiki).not.toContain('修正记录：')
     decideCorrection('approved','accept')
     expect(jobs(env.dir).filter(j=>j.kind==='correction')).toHaveLength(1)
     expect(loadNote(id,env.dir)?.raw_content).toBe('待纠正的普通判断')
@@ -147,4 +149,12 @@ describe('persistent thinking workflow',()=>{
     expect(jobs(env.dir)[0].status).toBe('interrupted')
     expect(jobs(env.dir)[0].steps.finished).toBeTruthy()
   })
+})
+
+it('retains a long AI comment without application character clipping',async()=>{
+ const id=saveNote(env.dir,'我的观点')
+ const body='完整回应中的一个论点。'.repeat(2000)
+ env.generate.mockResolvedValue(answer({body,skip:false,fact_check:null}))
+ enqueue({kind:'note',id},'comment');await tickThinking()
+ expect(getInsightView({kind:'note',id}).insight?.body).toBe(body)
 })
