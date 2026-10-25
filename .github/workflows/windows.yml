@@ -18,7 +18,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - name: Install dependencies
+        run: |
+          git config --global url.https://github.com/.insteadOf ssh://git@github.com/
+          npm ci
       - run: npm run typecheck
       - run: npm run test:run
       - run: node --test scripts/publish-release.test.mjs

@@ -20,3 +20,5 @@
 - https://api-docs.deepseek.com/quick_start/pricing/
 
 Search/Fetch 按请求收费，不虚构模型 token 用量。模型费用仍由实际 token 用量决定。
+
+CI 使用 npm 官方包源，并将锁文件中的 Electron 构建工具 SSH 依赖映射到 HTTPS，避免 Windows runner 卡在下载依赖。
