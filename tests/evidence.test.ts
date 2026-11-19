@@ -6,7 +6,7 @@ import { newestFirst, readEffectiveTime } from '../src/shared/note-time'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { commitWiki } from '../src/main/store/wiki-revision'
+import { commitWiki, withoutCorrectionAppendix } from '../src/main/store/wiki-revision'
 import type { SourceEvidence } from '../src/shared/insights'
 describe('evidence boundaries',()=>{
   it('does not mistake generated links for native search results',()=>{
@@ -55,4 +55,11 @@ describe('evidence boundaries',()=>{
       expect(readFileSync(join(dir,'wikis','学习_2026_09.md'),'utf8')).toBe('already changed')
     }finally{rmSync(dir,{recursive:true,force:true})}
   })
+})
+
+it('removes the managed correction appendix while preserving following user sections',()=>{
+ const old='# 学习\n\n正文\n\n<!-- flownote-corrections -->\n## 已接纳的观点修正\n\n- 旧修正\n  - 笔记：123 · 修正记录：456\n\n## 自己的后记\n\n保留这些文字'
+ const clean=withoutCorrectionAppendix(old)
+ expect(clean).toContain('正文');expect(clean).toContain('保留这些文字')
+ expect(clean).not.toContain('flownote-corrections');expect(clean).not.toContain('修正记录：')
 })

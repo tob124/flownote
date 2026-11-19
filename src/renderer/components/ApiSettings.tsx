@@ -7,16 +7,8 @@ export default function ApiSettings(): JSX.Element {
     <div className="settings-section">
       <div className="settings-section-title">AI 接口</div>
       <div className="settings-row">
-        <select
-          className="settings-select"
-          value={config.api_provider}
-          onChange={(e) =>
-            void save({ ...config, api_provider: e.target.value as 'DeepSeek' | 'Gemini' })
-          }
-        >
-          <option value="DeepSeek">DeepSeek</option>
-          <option value="Gemini">Gemini</option>
-        </select>
+        <p>DeepSeek Flash · 官方 Search / Fetch 联网检索</p>
+        {config.api_provider !== 'DeepSeek' && <p role="alert">旧配置使用了其他提供商，请切换并填写 DeepSeek API Key。<button onClick={()=>void save({...config,api_provider:'DeepSeek',api_key:''})}>切换至 DeepSeek Flash</button></p>}
       </div>
       <div className="settings-row">
         <input

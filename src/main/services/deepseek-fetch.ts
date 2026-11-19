@@ -1,27 +1,26 @@
 import { sourceUrl } from './source-reader'
+import { limited } from '../llm/request-limit'
 
 const MAX_RESPONSE_BYTES = 2_000_000
 const MAX_CLIP_LENGTH = 100_000
 
-export async function fetchWebClip(key: string, rawUrl: unknown): Promise<string> {
-  let url: URL
-  let source: string
+function publicWebUrl(rawUrl: unknown): URL {
   try {
     if (typeof rawUrl !== 'string' || rawUrl.trim().length > 8192) throw new Error()
-    url = sourceUrl(rawUrl.trim())
+    const url = sourceUrl(rawUrl.trim())
     // A trailing DNS dot does not make a local hostname public.
     if (url.hostname.endsWith('.')) {
       url.hostname = url.hostname.slice(0, -1)
       sourceUrl(url.href)
     }
-    source = url.href
-    url.hash = ''
     if (url.href.length > 8192) throw new Error()
+    return url
   } catch {
     throw new Error('请输入有效的公开网页链接（HTTP 或 HTTPS）')
   }
+}
 
-  const signal = AbortSignal.timeout(25_000)
+async function requestWebPage(key: string, url: URL, signal: AbortSignal): Promise<{ title: string; content: string }> {
   let page: { title?: unknown; content?: unknown }
   try {
     const response = await fetch('https://api.deepseek.com/v1/tools/fetch', {
@@ -64,13 +63,29 @@ export async function fetchWebClip(key: string, rawUrl: unknown): Promise<string
     page = JSON.parse(Buffer.concat(chunks, size).toString('utf8'))
   } catch (error) {
     if (error instanceof ClipError) throw error
-    if (signal.aborted) throw new Error('剪藏网页超时，请稍后重试')
+    if (signal.aborted) throw new Error('抓取网页超时或已取消，请稍后重试')
     if (error instanceof SyntaxError) throw new Error('DeepSeek 返回的网页数据格式无效，请稍后重试')
     throw new Error('无法连接 DeepSeek，请检查网络后重试')
   }
   const content = typeof page?.content === 'string' ? page.content.trim() : ''
   if (!content) throw new Error('DeepSeek 未返回可剪藏的网页正文')
-  const title = typeof page.title === 'string' ? page.title.replace(/\s+/g, ' ').trim().slice(0, 200) : ''
+  return { title: typeof page.title === 'string' ? page.title : '', content }
+}
+
+export async function fetchDeepseekPage(key: string, rawUrl: string, signal: AbortSignal): Promise<string> {
+  const url = publicWebUrl(rawUrl)
+  url.hash = ''
+  const page = await limited(() => requestWebPage(key, url, AbortSignal.any([signal, AbortSignal.timeout(25_000)])), signal)
+  return page.content
+}
+
+export async function fetchWebClip(key: string, rawUrl: unknown): Promise<string> {
+  const url = publicWebUrl(rawUrl)
+  const source = url.href
+  url.hash = ''
+  const page = await requestWebPage(key, url, AbortSignal.timeout(25_000))
+  const content = page.content
+  const title = page.title.replace(/\s+/g, ' ').trim().slice(0, 200)
   const heading = title || url.hostname
   const prefix = `## ${heading.replace(/[\\`*_[\]<>#~&]/g, '\\$&')}\n\n[来源网页](<${source}>)\n\n`
   if (content.length <= MAX_CLIP_LENGTH) return prefix + content

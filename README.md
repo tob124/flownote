@@ -1,3 +1,9 @@
+# FlowNote 3.0.2
+
+3.0.2 加入 Wiki 搜索和网页剪藏，更新说明见 [更新日志](更新日志汇总20260922.md)。Windows 检查通过后自动编译并发布安装包。[下载最新版](https://github.com/tob124/flownote/releases/latest)
+
+上一版的 AI、笔记交互修复和反馈按钮说明见 [3.0.1 修复说明](docs/RELEASE-3.0.1.md)。
+
 # FlowNote
 
 个人知识管理工具 — "冥想盆" (Pensieve)。快速捕获灵感笔记，AI 自动分类/打标签，每月 AI 生成精选 Wiki 页面，支持"Dream"知识整合洞察。
@@ -242,4 +248,4 @@ src/
 
 - **Wiki 搜索**：打开 Wiki 后点「搜索 Wiki」或按 Ctrl+F。默认在当前正文高亮并逐处跳转，切换到「所有 Wiki」可查活跃 Wiki 和封存快照。所有 Wiki 显示按文件分组的 Markdown 摘录。
 - **网页剪藏**：在「新建笔记 → 输入工具 → 剪藏网页」填写公开网页链接。FlowNote 会用设置中的 DeepSeek 密钥取得标题和 Markdown 正文，连同来源链接追加到草稿。检查、编辑后再保存。
-- **联网研究**：延伸阅读和 Dream 使用 DeepSeek Search 获取检索线索，再读取原网页核查。独立 Search 和 Fetch 按成功请求计费。 [DeepSeek 计费说明](https://api-docs.deepseek.com/guides/search/#billing)
+- **联网研究**：延伸阅读和 Dream 使用 DeepSeek Search 获取检索线索，再用 Fetch 或本地阅读器取得正文核查。独立 Search 和 Fetch 按成功请求计费。 [DeepSeek 计费说明](https://api-docs.deepseek.com/guides/search/#billing)

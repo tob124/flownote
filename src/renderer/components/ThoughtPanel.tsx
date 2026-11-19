@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import {ActionMenu,Button} from './ui/Controls'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkLineBreaks from '../utils/remark-line-breaks'
+import { AI_OUTPUT_WARNING_TOKENS } from '../../shared/insights'
 import type { InsightView, Owner, SourceEvidence } from '../../shared/insights'
 import { useDraftGuard } from '../utils/useDraftGuard'
 import { useConfig } from '../context/ConfigContext'
@@ -12,7 +14,7 @@ import '../styles/thinking.css'
 
 export function ThoughtMarkdown({text}:{text:string}):JSX.Element {
   const {revealNote}=useNotes();const {setPageId}=useApp()
-  return <div className="thought-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}
+  return <div className="thought-markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkLineBreaks]}
     components={{a:({children,href})=>href?.startsWith('#note-')?<button onClick={()=>{revealNote(href.slice(6));setPageId('notes')}}>{children}</button>:<a href={href} target="_blank" rel="noreferrer">{children}</a>}}>{text}</ReactMarkdown></div>
 }
 function Sources({items}:{items:SourceEvidence[]}):JSX.Element {
@@ -130,6 +132,7 @@ export default function ThoughtPanel({owner,compact=false,noteLabel='这条笔�
           {label:'与我的问题不相关',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'irrelevant',r.id))}
         ]}>{r.feedback==='helpful'?'已标记有帮助':r.feedback==='read'?'已读':r.feedback==='irrelevant'?'已标记不相关':'评价这项推荐'}</ActionMenu>
       </article>)}
+      <p className="thought-meta">阅读反馈保存在当前资料库。“已读／不相关”会作为后续推荐避免重复的参考；“有帮助”仅记录评价。</p>
       {!!value?.sources.length && <Sources items={value.sources}/>}
       </>}
       {tab==='response' && <>
@@ -148,7 +151,8 @@ export default function ThoughtPanel({owner,compact=false,noteLabel='这条笔�
           {label:'有帮助',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'helpful'))},
           {label:'没帮助',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'unhelpful'))},
           {label:'少对这类内容评论',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'less'))}
-        ]}>{view.insight.feedback?'已记录反馈':'评价这条回应'}</ActionMenu>
+        ]}>{view.insight.feedback ? ({helpful:'已标记有帮助',unhelpful:'已标记没帮助',less:'已偏好减少同类评论'} as Record<string,string>)[view.insight.feedback] || '已记录反馈' : '评价这条回应'}</ActionMenu>
+        <details><summary>反馈有什么作用？</summary><p>“有帮助／没帮助”只在当前资料库记录评价，不训练模型，也不自动修改笔记或 Wiki。“少对这类内容评论”会将最近最多 8 条同类例子作为后续评论的偏好参考，仍可能收到评论；这些例子会随后续 AI 请求发送给 DeepSeek。</p></details>
       </div>}
       {!!value?.sources.length && !value.recommendations.length && <Sources items={value.sources}/>}
       </>}
@@ -164,6 +168,7 @@ export default function ThoughtPanel({owner,compact=false,noteLabel='这条笔�
       </form>
       </>}
       </div>
+      {value && value.usage.output >= AI_OUTPUT_WARNING_TOKENS && <p className="thought-warning" role="status">本次输出较长，耗时与费用可能较高；完整内容已保留。</p>}
       {value && <details className="thought-usage"><summary>本次生成记录</summary><p className="thought-meta">输入 {value.usage.input} · 输出 {value.usage.output} token · 搜索 {value.usage.searches} 次</p></details>}
     </>}
     {current && <button disabled={busy} onClick={()=>void act(()=>window.api.thinking.action(current.id,'cancel'))}>取消本次处理</button>}

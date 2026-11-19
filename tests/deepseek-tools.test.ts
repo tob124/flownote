@@ -13,7 +13,7 @@ it('searches with the standalone API and keeps snippets separate from source tex
   const fetch = vi.fn().mockResolvedValue(Response.json(result))
   vi.stubGlobal('fetch', fetch)
   const persist = vi.fn()
-  const search = await searchDeepseek('test-key', '书😀'.repeat(80), new AbortController().signal, persist)
+  const search = await searchDeepseek('test-key', '书😀'.repeat(64), new AbortController().signal, persist)
   expect(search.sources).toMatchObject([{ url: 'https://example.org/book', title: 'First', excerpt: 'Search excerpt', text: '' }])
   expect(search.usage).toEqual({ input: 0, output: 0, searches: 1 })
   expect(persist).toHaveBeenCalledWith(result, search.usage)

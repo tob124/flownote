@@ -5,10 +5,11 @@ export interface SourceEvidence {
   id: string; url: string; title: string; fetched_at: number
   text: string; excerpt?: string; kind: 'primary' | 'secondary' | 'unknown'
   read_status?: 'read' | 'abstract' | 'failed' | 'not_attempted'
+  search_authority?: number; search_score?: number
   read_error?: string
   analysis_ranges?: {start:number;end:number}[]
   document_type?: 'author' | 'publisher' | 'paper' | 'review' | 'repost' | 'unknown'
-  format?: 'html' | 'xml' | 'pdf'; coverage?: string; identifier?: string; version?: string
+  format?: 'html' | 'xml' | 'pdf' | 'markdown'; coverage?: string; identifier?: string; version?: string
 }
 export interface Recommendation {
   id: string; title: string; author: string; original_title: string; translation: string
@@ -52,3 +53,5 @@ export interface WikiCorrection {
   status: 'pending' | 'accepted' | 'denied' | 'applied' | 'stale'
   wiki_file?: string; applied_at?: number; before_hash?: string; after_hash?: string
 }
+
+export const AI_OUTPUT_WARNING_TOKENS = 16000

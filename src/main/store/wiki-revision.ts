@@ -16,12 +16,16 @@ export function readWikiAt(dir: string, filename: string): string {
 export function acceptedCorrections(dir: string, filename: string): WikiCorrection[] {
   return aiList<WikiCorrection>(dir,'corrections').filter(c => c.wiki_file === filename && ['accepted','applied'].includes(c.status))
 }
+/** Remove only the previously managed appendix, preserving later user sections. */
+export function withoutCorrectionAppendix(markdown:string):string {
+  return markdown.replace(/(?:<!--\s*flownote-corrections\s*-->\s*)?^## (?:已接纳的观点修正|观点修正与依据)[^\n]*\n[\s\S]*?(?=^#{1,2} |$(?![\s\S]))/gm,'')
+    .replace(/<!--\s*flownote-corrections\s*-->/g,'').trim()
+}
 export function correctionAppendix(items: WikiCorrection[]): string {
   if (!items.length) return ''
-  return '\n\n<!-- flownote-corrections -->\n## 已接纳的观点修正\n\n' + items.map(c =>
-    '- ' + c.replacement + '\n  - 原判断：' + c.claim + '\n  - 依据：' +
-    c.sources.map(s => '[' + s.title.replace(/[\[\]]/g,'') + '](' + s.url + ')').join('；') +
-    '\n  - 笔记：' + c.note_id + ' · 修正记录：' + c.id
+  return '\n\n## 观点修正与依据\n\n' + items.map(c =>
+    '- ' + c.replacement + '\n  - 依据：' +
+    c.sources.map(s => '[' + s.title.replace(/[\[\]]/g,'') + '](' + s.url + ')').join('；')
   ).join('\n\n')
 }
 export function commitWiki(dir: string, filename: string, expected: string, content: string): void {

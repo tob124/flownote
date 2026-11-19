@@ -44,6 +44,8 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   const [sending, setSending] = useState(false)
   const [listening, setListening] = useState(false)
   const [polishing, setPolishing] = useState(false)
+  const [polishStatus, setPolishStatus] = useState('')
+  useEffect(()=>{if(polishing || !polishStatus)return;const timer=setTimeout(()=>setPolishStatus(''),3500);return()=>clearTimeout(timer)},[polishing,polishStatus])
   const [error, setError] = useState<string | null>(null)
   const [pendingFiles, setPendingFiles] = useState<NoteFile[]>(Array.isArray(initial.files)?initial.files:[])
   const [attaching, setAttaching] = useState(false)
@@ -57,7 +59,7 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   const [clipStatus, setClipStatus] = useState('')
   const clipInput = useRef<HTMLInputElement>(null)
   const textInput = useRef<HTMLTextAreaElement>(null)
-  const clipAvailable = config.api_provider === 'DeepSeek' && Boolean(config.api_key?.trim())
+  const deepseekConfigured = config.api_provider === 'DeepSeek' && Boolean(config.api_key?.trim())
 
   const alive=useRef(true)
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;recognitionRef.current?.stop()}},[])
@@ -77,7 +79,7 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
 
   async function clipPage(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
-    if (!clipAvailable || !clipUrl.trim() || clipping || sending || polishing || listening) return
+    if (!deepseekConfigured || !clipUrl.trim() || clipping || sending || polishing || listening) return
     setClipping(true)
     setClipError('')
     setClipStatus('')
@@ -85,7 +87,7 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
     try {
       const clip = await window.api.notes.clipWeb(clipUrl.trim())
       if (!alive.current) return
-      setText(previous => [previous.trimEnd(), clip].filter(Boolean).join('\n\n'))
+      setText(previous => previous ? `${previous}\n\n${clip}` : clip)
       setClipUrl('')
       setClipOpen(false)
       setClipStatus('网页已加入草稿，可编辑后保存。')
@@ -102,7 +104,7 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
 
   async function saveNote(): Promise<void> {
     const trimmed = text.trim()
-    if (!trimmed || sending || clipping) return
+    if (!trimmed || sending || polishing || clipping) return
     if (trimmed.length > 1_000_000) {
       setError('笔记超过 100 万字符，请缩短后保存')
       return
@@ -221,28 +223,32 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   }
 
   async function handlePolish(): Promise<void> {
-    if (!text.trim() || polishing) return
+    if (!text.trim() || polishing || sending || listening || clipping) return
     setPolishing(true)
+    setPolishStatus('AI 正在润色…')
     setError(null)
     try {
       const result = await window.api.polish(text)
-      if (result) setText(result)
+      if (!alive.current) return
+      if (!result?.trim()) { setPolishStatus(''); setError('润色失败，AI 未返回内容；原文已保留'); return }
+      setText(result)
+      setPolishStatus(result === text ? 'AI 润色完成，文字无需调整' : 'AI 润色完成，请核对后保存')
     } catch {
-      setError('润色失败，请稍后重试')
+      if(alive.current){setPolishStatus('');setError('润色失败，原文已保留，请稍后重试')}
     } finally {
-      setPolishing(false)
+      if(alive.current)setPolishing(false)
     }
   }
 
   const speechSupported = getSpeechRecognition() !== null
-  const polishEnabled = Boolean(config.api_key) && text.trim().length > 0
+  const polishEnabled = deepseekConfigured && text.trim().length > 0
 
   return (
     <div className={'quick-input-container'+(expanded&&!workspace?' expanded':'')}>
       <label className="composer-label" htmlFor="quick-note">{workspace?'新建笔记':'写下一条记录'}</label>
       <textarea ref={textInput} id="quick-note" className={'quick-input'+(expanded&&!workspace?' expanded':'')}
         placeholder="此刻有什么值得记下来？" value={text} onChange={e=>setText(e.target.value)}
-        onKeyDown={e=>void handleKeyDown(e)} disabled={sending} rows={3}/>
+        onKeyDown={e=>void handleKeyDown(e)} disabled={sending||polishing} aria-busy={polishing} rows={3}/>
       {pendingFiles.length>0 && <div className="quick-input-pending">
         {pendingFiles.map((f,i)=><span className="quick-input-file-chip" key={f.storedName+i}><Icon name="clip"/>{f.name}
           <button aria-label={'移除附件 '+f.name} onClick={()=>setPendingFiles(prev=>prev.filter((_,idx)=>idx!==i))}>×</button>
@@ -254,28 +260,29 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
           <ActionMenu label="输入工具" items={[
             ...(!workspace?[{label:expanded?'收起编辑区':'展开编辑区',icon:'expand' as const,onSelect:()=>setExpanded(v=>!v)}]:[]),
             {label:'剪藏网页',icon:'link',onSelect:()=>{setClipOpen(true);clipInput.current?.focus()}},
-            {label:listening?'停止语音输入':'语音输入',icon:'mic',disabled:!speechSupported||clipping,onSelect:toggleListening},
-            {label:polishing?'正在润色…':'润色文字',icon:'spark',disabled:!polishEnabled||polishing||clipping,onSelect:()=>void handlePolish()}
+            {label:listening?'停止语音输入':'语音输入',icon:'mic',disabled:!speechSupported||polishing||sending||clipping,onSelect:toggleListening},
+            {label:polishing?'正在润色…':'润色文字',icon:'spark',disabled:!polishEnabled||polishing||sending||listening||clipping,onSelect:()=>void handlePolish()}
           ]}/>
           {listening && <span role="status" className="quick-input-listening">正在聆听…</span>}
         </div>
         <div className="composer-save">
           <span className="quick-input-hint">{text.length?text.length+' 字 · ':''}Alt + Enter</span>
-          <Button variant="primary" onClick={()=>void saveNote()} disabled={!text.trim()||sending||clipping}>{sending?'正在保存…':'保存笔记'}</Button>
+          <Button variant="primary" onClick={()=>void saveNote()} disabled={!text.trim()||sending||polishing||clipping}>{sending?'正在保存…':'保存笔记'}</Button>
         </div>
       </div>
       {clipOpen && <form className="web-clip" onSubmit={event => void clipPage(event)}>
         <div className="web-clip-fields">
           <input ref={clipInput} type="url" aria-label="网页链接" aria-describedby="web-clip-help" placeholder="https://…"
             value={clipUrl} onChange={event => {setClipUrl(event.target.value); setClipError('')}} maxLength={8192} required disabled={clipping} />
-          <Button type="submit" disabled={!clipAvailable||clipping||sending||polishing||listening}>{clipping?'正在抓取…':'抓取网页'}</Button>
+          <Button type="submit" disabled={!deepseekConfigured||clipping||sending||polishing||listening}>{clipping?'正在抓取…':'抓取网页'}</Button>
           <Button variant="quiet" icon="close" iconOnly aria-label="关闭网页剪藏" disabled={clipping} onClick={()=>{setClipOpen(false);textInput.current?.focus()}} />
         </div>
-        <small id="web-clip-help">{clipAvailable ? '链接将发送给 DeepSeek，抓取成功可能计费。' : '请先在设置中选择 DeepSeek 并填写 API 密钥。'}</small>
+        <small id="web-clip-help">{deepseekConfigured ? '链接将发送给 DeepSeek，抓取成功可能计费。' : '请先在设置中选择 DeepSeek 并填写 API 密钥。'}</small>
         {clipping && <span role="status" className="sr-only">正在抓取网页</span>}
         {clipError && <div role="alert" className="quick-input-error">{clipError}</div>}
       </form>}
       {clipStatus && <div className="web-clip-status" role="status">{clipStatus}</div>}
+      {polishStatus && <p className="quick-input-polish-status" role="status" aria-live="polite">{polishStatus}</p>}
       {savedId && <div className="composer-receipt" role="status"><span>已保存到笔记</span><Button variant="quiet" onClick={()=>revealNote(savedId)}>查看笔记</Button></div>}
       {error && <div role="alert" className="quick-input-error">{error}</div>}
     </div>

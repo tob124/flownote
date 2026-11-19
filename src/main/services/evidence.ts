@@ -10,7 +10,7 @@ export function validateRecommendations(raw: unknown, sources: SourceEvidence[])
   const byId = new Map(sources.map(s => [s.id,s]))
   return raw.slice(0,3).flatMap((item,index) => {
     if (!item || typeof item !== 'object') return []
-    const text = (key: string): string => typeof item[key] === 'string' ? item[key].trim().slice(0,3000) : ''
+    const text = (key: string): string => typeof item[key] === 'string' ? item[key].trim() : ''
     if (!text('title') || !text('idea') || !text('relevance') || !text('question')) return []
     const claims = Array.isArray(item.support) ? item.support : []
     const supported = claims.filter((c:any) => {

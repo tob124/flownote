@@ -8,27 +8,22 @@ export class GenerationError extends Error {
 
 export async function generate(config: AppConfig, instruction: string, material: string, signal: AbortSignal, deep = false, format: 'json' | 'markdown' = 'json'): Promise<{ text: string; usage: Usage }> {
   if (!config.api_key) throw new Error('请先配置 API Key')
-  const boundedMaterial = material.length > 64000 ? material.slice(0,64000) + '\n[材料超出本次输入上限，末尾未纳入；不得声称完整阅读]' : material
   return limited(async () => {
-    const deepseek = config.api_provider === 'DeepSeek'
-    const endpoint = deepseek ? 'https://api.deepseek.com/v1/chat/completions' :
-      'https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODELS.gemini + ':generateContent'
-    const body = deepseek ? {
-      model: AI_MODELS.deepseek, messages: [{ role: 'system', content: instruction }, { role: 'user', content: boundedMaterial }],
-      max_tokens: deep ? AI_LIMITS.outputTokens : 6000, thinking: { type: deep ? 'enabled' : 'disabled' },
+    if (config.api_provider !== 'DeepSeek') throw new Error('当前仅支持 DeepSeek Flash，请在设置中配置 DeepSeek API Key')
+    const endpoint = 'https://api.deepseek.com/v1/chat/completions'
+    const body = {
+      model: AI_MODELS.deepseek, messages: [{ role: 'system', content: instruction }, { role: 'user', content: material }],
+      max_tokens: AI_LIMITS.outputTokens, thinking: { type: deep ? 'enabled' : 'disabled' },
       ...(deep ? { reasoning_effort: 'high' } : {}), ...(format === 'json' ? {response_format: { type: 'json_object' }} : {})
-    } : {
-      systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: 'user', parts: [{ text: boundedMaterial }] }],
-      generationConfig: { maxOutputTokens: deep ? AI_LIMITS.outputTokens : 6000, responseMimeType: format === 'json' ? 'application/json' : 'text/plain' }
     }
     const response = await fetch(endpoint, {
-      method: 'POST', signal: AbortSignal.any([signal, AbortSignal.timeout(180000)]),
-      headers: { 'Content-Type': 'application/json', ...(deepseek ? { Authorization: 'Bearer ' + config.api_key } : { 'x-goog-api-key': config.api_key }) },
+      method: 'POST', signal: AbortSignal.any([signal, AbortSignal.timeout(1800000)]),
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + config.api_key },
       body: JSON.stringify(body)
     })
     if (!response.ok) throw new Error('AI 请求失败（' + response.status + '）')
     const data = await response.json() as any
-    const text = deepseek ? data.choices?.[0]?.message?.content : data.candidates?.[0]?.content?.parts?.map((p:any) => p.text || '').join('')
+    const text = data.choices?.[0]?.message?.content
     const usage = { input: data.usage?.prompt_tokens ?? data.usageMetadata?.promptTokenCount ?? 0,
       output: data.usage?.completion_tokens ?? data.usageMetadata?.candidatesTokenCount ?? 0, searches: 0 }
     if (data.choices?.[0]?.finish_reason==='length' || data.candidates?.[0]?.finishReason==='MAX_TOKENS')
