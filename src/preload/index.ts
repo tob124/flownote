@@ -1,6 +1,7 @@
 import type { AiJob, Owner, Feedback, InsightView, DreamReport } from '../shared/insights'
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Note, NotePatch, NotePatchResult, AppConfig, DreamMeta, NotificationItem, NoteFile } from '../shared/types'
+import type { WikiSearchResult } from '../shared/wiki-search'
 
 const api = {
   thinking: {
@@ -17,6 +18,7 @@ const api = {
     exportLegacy: ():Promise<boolean> => ipcRenderer.invoke('thinking:legacy-export')
   },
   notes: {
+    clipWeb: (url: string): Promise<string> => ipcRenderer.invoke('notes:clip-web', url),
     createRecord: (content:string):Promise<Note> => ipcRenderer.invoke('notes:create-record',content),
     loadAll: (): Promise<Note[]> => ipcRenderer.invoke('notes:load-all'),
     search: (keyword: string): Promise<Note[]> => ipcRenderer.invoke('notes:search', keyword),
@@ -30,6 +32,7 @@ const api = {
     deleteForever: (id: string): Promise<boolean> => ipcRenderer.invoke('notes:delete-forever', id)
   },
   wikis: {
+    search: (query: string): Promise<WikiSearchResult> => ipcRenderer.invoke('wikis:search', query),
     list: (): Promise<string[]> => ipcRenderer.invoke('wikis:list'),
     load: (filename: string): Promise<string> => ipcRenderer.invoke('wikis:load', filename),
     loadDiff: (filename: string): Promise<string[]> =>

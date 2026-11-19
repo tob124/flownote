@@ -10,9 +10,11 @@ import {
 import { computeAddedLines } from '../../shared/diff'
 import { getSyncDir } from '../store/note-store'
 import { IPC_CHANNELS } from '../../shared/types'
+import { searchWikiFiles } from '../store/wiki-search'
 
 export function registerWikisIpc(): void {
   ipcMain.handle(IPC_CHANNELS.WIKIS_LIST, () => listWikis())
+  ipcMain.handle('wikis:search', (_e, query: unknown) => searchWikiFiles(getSyncDir(), query))
 
   ipcMain.handle(IPC_CHANNELS.WIKIS_LOAD, (_e, filename: string) => loadWiki(filename))
 

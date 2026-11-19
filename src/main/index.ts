@@ -68,6 +68,11 @@ function createWindow(): BrowserWindow {
     if (/^https?:\/\//i.test(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }
   })
+  // Markdown links must never replace the renderer that owns the preload API.
+  win.webContents.on('will-navigate', (event, target) => {
+    event.preventDefault()
+    if (/^https?:\/\//i.test(target)) void shell.openExternal(target)
+  })
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)

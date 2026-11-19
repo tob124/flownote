@@ -149,3 +149,23 @@
   padding: 5px 14px;
   font-size: 13px;
 }
+
+.web-clip {
+  flex-shrink: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border-light);
+}
+.web-clip-fields { display: flex; align-items: center; gap: 6px; }
+.web-clip-fields input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+}
+.web-clip-fields input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.web-clip small, .web-clip-status { display: block; color: var(--text-secondary); margin: 6px 0; font-size: 12px; }
+.web-clip .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

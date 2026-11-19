@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 
 interface WikisCtx {
   files: string[]
@@ -34,6 +34,7 @@ export function WikisProvider({ children }: { children: ReactNode }): JSX.Elemen
   const [currentIsSealed, setCurrentIsSealed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [wikiStatus, setWikiStatus] = useState<'idle' | 'updating' | 'updated'>('idle')
+  const selection = useRef(0)
 
   // 同时加载活跃与已封存的 wiki，封存项并入各自月份分组展示
   const loadList = useCallback(async () => {
@@ -49,33 +50,24 @@ export function WikisProvider({ children }: { children: ReactNode }): JSX.Elemen
     }
   }, [])
 
-  const selectFile = useCallback(async (filename: string) => {
+  const select = useCallback(async (filename: string, sealed: boolean) => {
+    const request = ++selection.current
     setIsLoading(true)
     setCurrentFile(filename)
-    setCurrentIsSealed(false)
+    setCurrentIsSealed(sealed)
+    setCurrentContent(null)
     try {
-      const content = await window.api.wikis.load(filename)
-      setCurrentContent(content)
+      const content = await (sealed ? window.api.wikis.loadSealed(filename) : window.api.wikis.load(filename))
+      if (request === selection.current) setCurrentContent(content)
     } catch {
-      setCurrentContent(null)
+      if (request === selection.current) setCurrentContent(null)
     } finally {
-      setIsLoading(false)
+      if (request === selection.current) setIsLoading(false)
     }
   }, [])
 
-  const selectSealed = useCallback(async (filename: string) => {
-    setIsLoading(true)
-    setCurrentFile(filename)
-    setCurrentIsSealed(true)
-    try {
-      const content = await window.api.wikis.loadSealed(filename)
-      setCurrentContent(content)
-    } catch {
-      setCurrentContent(null)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
+  const selectFile = useCallback((filename: string) => select(filename, false), [select])
+  const selectSealed = useCallback((filename: string) => select(filename, true), [select])
 
   // Listen for wiki generation events
   useEffect(() => {

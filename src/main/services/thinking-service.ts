@@ -228,11 +228,14 @@ async function material(dir: string, job: AiJob, config: AppConfig, signal: Abor
 async function searched(dir:string,job:AiJob,config:AppConfig,query:string,signal:AbortSignal):Promise<ReturnType<typeof parseSearch>> {
   const id=job.id+'_'+hashNoteInput(query)
   const saved=aiRead<{data:any}>(dir,'responses',id)
-  if(saved)return parseSearch(saved.data)
+  if (saved) {
+    try { return parseSearch(saved.data) }
+    catch { /* The old API could persist a response without retrievable sources. */ }
+  }
   let accounted=false
-  const result=await searchDeepseek(config.api_key,query,signal,data=>{
+  const result=await searchDeepseek(config.api_key,query,signal,(data,usage)=>{
     aiWrite(dir,'responses',id,{at:Date.now(),step:job.phase,data})
-    sum(job.usage,{input:data.usage?.input_tokens || 0,output:data.usage?.output_tokens || 0,searches:data.usage?.server_tool_use?.web_search_requests || 0})
+    sum(job.usage,usage)
     accounted=true;record(dir,job)
   })
   if(!accounted)sum(job.usage,result.usage)
@@ -241,16 +244,18 @@ async function searched(dir:string,job:AiJob,config:AppConfig,query:string,signa
 async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: AbortSignal, queries: string[], maxPages: number = AI_LIMITS.pages): Promise<{sources:SourceEvidence[];warning:string}> {
   const sources = new Map<string,SourceEvidence>(); const errors: string[] = []
   const ranks = new Map<string,number>()
+  let attemptedSearch = false
   if (config.api_provider !== 'DeepSeek') return {sources:[],warning:'当前提供商尚未接入联网核查，以下观点未核实'}
   for (let i=0;i<Math.min(AI_LIMITS.searchCalls-2,queries.length);i++) {
     const query = queries[i].trim().slice(0,600); if (!query) continue
+    attemptedSearch = true
     try {
       const result = await step(dir,job,'搜索 '+i,signal,async () => {
         const key = hashNoteInput(query)
         const cached = aiRead<{at:number;sources:SourceEvidence[]}>(dir,'search-cache',key)
         if (cached && Date.now()-cached.at < 7*86400000) return cached.sources
         const found = await searched(dir,job,config,query,signal)
-        aiWrite(dir,'search-cache',key,{at:Date.now(),sources:found.sources})
+        if (found.sources.length) aiWrite(dir,'search-cache',key,{at:Date.now(),sources:found.sources})
         return found.sources
       })
       result.forEach((s,index) => {sources.set(s.id,s);ranks.set(s.id,Math.min(ranks.get(s.id)??Infinity,index))})
@@ -296,14 +301,20 @@ async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: Abor
       const failed=ranked.filter(s=>s.read_status==='failed' || s.read_status==='abstract').slice(0,2)
       for(let i=0;i<failed.length;i++)try{
         const result=await step(dir,job,'查找公开替代版本 '+i,signal,async()=>{
-          const found=await searched(dir,job,config,failed[i].title.slice(0,250)+' open access full text author manuscript repository PMC',signal)
+          const title = Array.from(failed[i].title || new URL(failed[i].url).hostname).slice(0, 85).join('')
+          const found=await searched(dir,job,config,title+' open access full text author manuscript PMC',signal)
           return found.sources
         })
         for(const item of result)if(!sources.has(item.id)){sources.set(item.id,item);ranked.push(item)}
       }catch(error){signal.throwIfAborted();errors.push(String(error))}
     }
   }
-  return {sources:[...sources.values()],warning:errors.length ? '部分联网核查未完成。' : sources.size && ![...sources.values()].some(s => s.text) ? '仅取得检索来源，未读取到正文；观点归属尚未核实。' : ''}
+  const found = [...sources.values()]
+  let warning = ''
+  if (errors.length) warning = '部分联网核查未完成。'
+  else if (attemptedSearch && !found.length) warning = '未找到可用的联网来源。'
+  else if (found.length && !found.some(source => source.text)) warning = '仅取得检索来源，未读取到正文；观点归属尚未核实。'
+  return { sources: found, warning }
 }
 
 async function research(dir: string, job: AiJob, config: AppConfig, signal: AbortSignal, text: string): Promise<{body:string;recommendations:NoteInsight['recommendations'];sources:SourceEvidence[];warning:string}> {

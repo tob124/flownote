@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WikiList from '../components/WikiList'
 import MarkdownViewer from '../components/MarkdownViewer'
 import OutlinePanel from '../components/OutlinePanel'
@@ -7,10 +7,10 @@ import CustomScrollbar from '../components/CustomScrollbar'
 import type { Heading } from '../utils/markdown'
 import { useWikis } from '../context/WikisContext'
 import { useConfig } from '../context/ConfigContext'
+import WikiSearch from '../components/WikiSearch'
+import { Button } from '../components/ui/Controls'
 
-function getContainer(): HTMLElement | null {
-  return document.querySelector('.markdown-body') as HTMLElement | null
-}
+const WikiMarkdown = memo(MarkdownViewer)
 
 export default function WikisPage(): JSX.Element {
   const { currentContent, currentFile, currentIsSealed, loadList, selectFile } = useWikis()
@@ -28,6 +28,23 @@ export default function WikisPage(): JSX.Element {
   const [sealConfirm, setSealConfirm] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchButton = useRef<HTMLButtonElement>(null)
+  const searchInput = useRef<HTMLInputElement>(null)
+  const viewer = useRef<HTMLDivElement>(null)
+  const getContainer = useCallback(() => viewer.current?.querySelector<HTMLElement>('.markdown-body') ?? null, [])
+
+  useEffect(() => {
+    function find(event: KeyboardEvent): void {
+      if (sealConfirm || (!(event.ctrlKey || event.metaKey)) || event.key.toLowerCase() !== 'f') return
+      event.preventDefault()
+      setSearchOpen(true)
+      searchInput.current?.focus()
+      searchInput.current?.select()
+    }
+    window.addEventListener('keydown', find)
+    return () => window.removeEventListener('keydown', find)
+  }, [sealConfirm])
 
   function showToast(message: string): void {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -120,12 +137,14 @@ export default function WikisPage(): JSX.Element {
     setDiffLines(null)
     setHighlightDiff(false)
     if (!currentFile || currentIsSealed) return
+    let stale = false
     window.api.wikis
       .loadDiff(currentFile)
       .then((lines) => {
-        if (lines && lines.length) setDiffLines(new Set(lines))
+        if (!stale && lines?.length) setDiffLines(new Set(lines))
       })
       .catch(() => {})
+    return () => { stale = true }
   }, [currentFile, currentIsSealed])
 
   function navigate(id: string): void {
@@ -169,17 +188,21 @@ export default function WikisPage(): JSX.Element {
     <div style={{ display: 'flex', height: '100%' }}>
       <WikiList />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {currentContent !== null && (
+        {
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
+              flexWrap: 'wrap',
               gap: 10,
               padding: '8px 16px',
               borderBottom: '1px solid var(--border-light)',
               background: 'var(--bg-secondary)'
             }}
           >
+            <Button ref={searchButton} variant="quiet" icon="search" title="搜索 Wiki（Ctrl+F）" aria-expanded={searchOpen}
+              onClick={() => { setSearchOpen(true); searchInput.current?.focus() }}>搜索 Wiki</Button>
+            {currentContent !== null && <>
             <button
               className="quick-input-btn"
               onClick={toggleOutline}
@@ -214,8 +237,13 @@ export default function WikisPage(): JSX.Element {
                 🗄 封存当前
               </button>
             )}
+            </>}
           </div>
-        )}
+        }
+        {searchOpen && <WikiSearch input={searchInput} viewer={viewer} highlightDiff={highlightDiff} onClose={() => {
+          setSearchOpen(false)
+          searchButton.current?.focus()
+        }} />}
         {currentIsSealed && (
           <div
             style={{
@@ -233,10 +261,10 @@ export default function WikisPage(): JSX.Element {
           </div>
         )}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <div style={{ flex: 1, position: 'relative', minWidth: 0, display: 'flex' }}>
-            <MarkdownViewer
+          <div ref={viewer} style={{ flex: 1, position: 'relative', minWidth: 0, display: 'flex' }}>
+            <WikiMarkdown
               content={currentContent}
-              diffLines={diffLines}
+              diffLines={highlightDiff ? diffLines : null}
               highlightDiff={highlightDiff}
               onHeadings={setHeadings}
             />

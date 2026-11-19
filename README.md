@@ -239,3 +239,7 @@ src/
 主要记录与思考界面使用统一的按钮层级、上下文菜单和温润纸感布局，参见 [桌面交互与视觉规范](docs/next-generation/13-桌面交互与视觉规范.md)。
 
 搜索支持 `#标签 + 关键词`，如 `#自行车 换轮胎`；多个标签与关键词需同时满足。筛选面板保留日期、分类、收藏等条件，不再枚举全部标签。
+
+- **Wiki 搜索**：打开 Wiki 后点「搜索 Wiki」或按 Ctrl+F。默认在当前正文高亮并逐处跳转，切换到「所有 Wiki」可查活跃 Wiki 和封存快照。所有 Wiki 显示按文件分组的 Markdown 摘录。
+- **网页剪藏**：在「新建笔记 → 输入工具 → 剪藏网页」填写公开网页链接。FlowNote 会用设置中的 DeepSeek 密钥取得标题和 Markdown 正文，连同来源链接追加到草稿。检查、编辑后再保存。
+- **联网研究**：延伸阅读和 Dream 使用 DeepSeek Search 获取检索线索，再读取原网页核查。独立 Search 和 Fetch 按成功请求计费。 [DeepSeek 计费说明](https://api-docs.deepseek.com/guides/search/#billing)

@@ -1,41 +1,7 @@
 import { useWikis } from '../context/WikisContext'
+import { parseWikiFilename } from '../../shared/wiki-search'
 
-interface WikiFileInfo {
-  filename: string
-  category: string
-  yearMonth: string
-  year: number
-  month: number
-  sealed: boolean
-}
-
-function parseWikiFilename(filename: string): WikiFileInfo | null {
-  // 已封存: {category}_{YYYY_MM}_sealed_{timestamp}.md
-  const sealedMatch = filename.match(/^(.+)_(\d{4})_(\d{2})_sealed_(.+)\.md$/)
-  if (sealedMatch) {
-    const [, category, yearStr, monthStr] = sealedMatch
-    return {
-      filename,
-      category,
-      yearMonth: `${yearStr}-${monthStr}`,
-      year: parseInt(yearStr, 10),
-      month: parseInt(monthStr, 10),
-      sealed: true
-    }
-  }
-  // 活跃: {category}_{YYYY_MM}.md
-  const match = filename.match(/^(.+)_(\d{4})_(\d{2})\.md$/)
-  if (!match) return null
-  const [, category, yearStr, monthStr] = match
-  return {
-    filename,
-    category,
-    yearMonth: `${yearStr}-${monthStr}`,
-    year: parseInt(yearStr, 10),
-    month: parseInt(monthStr, 10),
-    sealed: false
-  }
-}
+type WikiFileInfo = NonNullable<ReturnType<typeof parseWikiFilename>>
 
 function formatMonthLabel(year: number, month: number): string {
   const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']

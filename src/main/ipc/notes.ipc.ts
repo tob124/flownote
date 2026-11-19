@@ -1,10 +1,26 @@
 import { ipcMain } from 'electron'
 import { loadNote, loadAllNotes, saveNote, updateNote, patchNote, NoteConflictError, searchNotes, deleteNote, listTrashedNotes, restoreNote, deleteNoteForever } from '../store/note-store'
 import { loadConfig } from '../store/config-store'
+import { fetchWebClip } from '../services/deepseek-fetch'
 import { IPC_CHANNELS } from '../../shared/types'
 import type { Note, NotePatch, NotePatchResult } from '../../shared/types'
 
 export function registerNotesIpc(): void {
+  let clipping = false
+  ipcMain.handle('notes:clip-web', async (_e, url: unknown) => {
+    const config = loadConfig()
+    if (!config.sync_dir) throw new Error('请先设置同步目录')
+    if (config.api_provider !== 'DeepSeek' || !config.api_key?.trim()) {
+      throw new Error('请先在设置中选择 DeepSeek 并填写 API 密钥')
+    }
+    if (clipping) throw new Error('已有一项网页剪藏正在进行')
+    clipping = true
+    try {
+      return await fetchWebClip(config.api_key.trim(), url)
+    } finally {
+      clipping = false
+    }
+  })
   ipcMain.handle('notes:create-record', (_e, content: string) => {
     const dir = loadConfig().sync_dir
     if (!dir || typeof content !== 'string' || !content.trim() || content.length > 1000000) throw new Error('笔记内容或目录无效')
