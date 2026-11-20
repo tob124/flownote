@@ -42,12 +42,31 @@ try {
   assert.doesNotMatch(await row(shortId).textContent(), /AI 摘要/)
   assert.match(await row(fallbackId).textContent(), /仍可阅读这段原文/)
   for (const theme of ['paper','dark','draft','solar']) {
-    const colors = await page.evaluate(theme => {
+    const { summary, body, contrast } = await page.evaluate(theme => {
       document.documentElement.setAttribute('data-theme', theme)
-      const preview = document.querySelector('.workspace-ai-preview')
-      return [getComputedStyle(preview).color, getComputedStyle(document.querySelector('.workspace-note p:not(.workspace-ai-preview)')).color]
+      const preview = getComputedStyle(document.querySelector('.workspace-ai-preview'))
+      const body = getComputedStyle(document.querySelector('.workspace-note p:not(.workspace-ai-preview)')).color
+      const canvas = document.createElement('canvas')
+      canvas.width = canvas.height = 1
+      const context = canvas.getContext('2d')
+      const luminance = value => {
+        context.fillStyle = value
+        context.fillRect(0,0,1,1)
+        const [r,g,b] = Array.from(context.getImageData(0,0,1,1).data, channel => {
+          const srgb = channel / 255
+          return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055)**2.4
+        })
+        return 0.2126*r + 0.7152*g + 0.0722*b
+      }
+      const ink = luminance(preview.color)
+      const contrast = Math.min(...['--bg-primary','--bg-card','--bg-hover'].map(token => {
+        const background = luminance(preview.getPropertyValue(token).trim())
+        return (Math.max(ink, background)+0.05)/(Math.min(ink, background)+0.05)
+      }))
+      return { summary:preview.color, body, contrast }
     },theme)
-    assert.notEqual(colors[0],colors[1])
+    assert.notEqual(summary,body)
+    assert(contrast >= 4.5, `${theme} summary contrast was ${contrast}`)
   }
   await page.evaluate(() => document.documentElement.setAttribute('data-theme','paper'))
 

@@ -9,7 +9,7 @@ $uninstaller = Join-Path $directory 'Uninstall FlowNote.exe'
 $desktop = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'FlowNote.lnk'
 $start = Join-Path ([Environment]::GetFolderPath('Programs')) 'FlowNote.lnk'
 $shortcutShell = New-Object -ComObject WScript.Shell
-Add-Type -AssemblyName System.Drawing
+$packageHash = (Get-FileHash -LiteralPath release/win-unpacked/FlowNote.exe).Hash
 
 function Install-FlowNote([string] $installerPath) {
     $process = Start-Process -FilePath $installerPath -ArgumentList @('/S', "/D=$directory") -PassThru -Wait -WindowStyle Hidden
@@ -26,24 +26,9 @@ function Assert-FlowNoteShortcuts {
         $iconSource = $shortcut.IconLocation -replace ',\s*-?\d+$', ''
         if ($iconSource -and $iconSource -ne $executable) { throw "Incorrect icon resource for $location" }
     }
-    $icon = [Drawing.Icon]::ExtractAssociatedIcon($executable)
-    $expected = [Drawing.Icon]::new((Resolve-Path resources/icon.ico).Path, $icon.Width, $icon.Height)
-    $actualBitmap = $icon.ToBitmap()
-    $expectedBitmap = $expected.ToBitmap()
-    try {
-        $matching = 0
-        for ($y = 0; $y -lt $icon.Height; $y++) {
-            for ($x = 0; $x -lt $icon.Width; $x++) {
-                if ($actualBitmap.GetPixel($x, $y).ToArgb() -eq $expectedBitmap.GetPixel($x, $y).ToArgb()) { $matching++ }
-            }
-        }
-        if ($matching -lt (0.9 * $icon.Width * $icon.Height)) { throw 'The installed executable does not contain the expected FlowNote icon' }
-    } finally {
-        $actualBitmap.Dispose()
-        $expectedBitmap.Dispose()
-        $icon.Dispose()
-        $expected.Dispose()
-    }
+    if ((Get-FileHash -LiteralPath $executable).Hash -ne $packageHash) { throw 'Installed FlowNote.exe differs from the packaged executable' }
+    node scripts/assert-windows-icon.cjs $executable resources/icon.ico
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to verify the embedded Windows shortcut icon' }
 }
 
 Install-FlowNote $installer[0].FullName

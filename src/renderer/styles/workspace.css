@@ -28,6 +28,7 @@
 .workspace-note>span{font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums}
 .workspace-note .workspace-ai-preview{color:color-mix(in srgb,var(--accent) 60%,var(--text-primary))}
 [data-theme=draft] .workspace-note .workspace-ai-preview{color:#315a83}
+[data-theme=solar] .workspace-note .workspace-ai-preview{color:color-mix(in srgb,var(--accent) 50%,var(--text-primary))}
 .workspace-ai-preview b{font-weight:650}
 .workspace-note[role=checkbox]{position:relative;padding-inline-start:34px}
 .workspace-note[role=checkbox]::before{position:absolute;inset-inline-start:12px;top:19px;content:'';width:14px;height:14px;border:1px solid var(--text-muted);border-radius:3px}
