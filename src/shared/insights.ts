@@ -19,6 +19,15 @@ export interface Recommendation {
   quality?: {kind:'rating'|'professional_review';source_id:string;excerpt:string;platform?:string;score?:number;count?:number;edition:string;checked_at:number;reason:string}
   evidence: 'primary' | 'secondary' | 'unverified'; quote?: string; feedback?: Feedback
 }
+export interface PinnedRecommendation {
+  id: string
+  recommendation: Recommendation
+  sources: SourceEvidence[]
+}
+export function recommendationIdentity(recommendation: Recommendation): string {
+  return JSON.stringify([recommendation.original_title || recommendation.title, recommendation.author]
+    .map(value => value.normalize('NFKC').trim().toLowerCase()))
+}
 export interface NoteInsight {
   schema_version: 1; id: string; owner: Owner; input_hash: string; created_at: number
   // Older saved remarks can still contain the retired 'less' feedback.
@@ -45,6 +54,7 @@ export interface AiJob {
 export interface InsightView {
   insight: NoteInsight | null; report: DreamReport | null; thread: DiscussionThread
   jobs: AiJob[]; stale: boolean; corrections: WikiCorrection[]
+  pinned: PinnedRecommendation[]
 }
 export const EMPTY_USAGE = (): Usage => ({ input: 0, output: 0, searches: 0 })
 

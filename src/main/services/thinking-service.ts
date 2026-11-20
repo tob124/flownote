@@ -1,8 +1,8 @@
 import { BrowserWindow } from 'electron'
 import { randomUUID } from 'crypto'
 import type { AppConfig, Note } from '../../shared/types'
-import type { AiJob, Owner, InsightView, NoteInsight, DreamReport, SourceEvidence, WikiCorrection, Feedback, Usage } from '../../shared/insights'
-import { EMPTY_USAGE } from '../../shared/insights'
+import type { AiJob, Owner, InsightView, NoteInsight, DreamReport, SourceEvidence, WikiCorrection, Feedback, Usage, PinnedRecommendation } from '../../shared/insights'
+import { EMPTY_USAGE, recommendationIdentity } from '../../shared/insights'
 import { noteDisplayTitle, noteOrganizationText, notePrimaryText } from '../../shared/note-material'
 import { loadConfig } from '../store/config-store'
 import { loadAllNotesFrom, loadNotesInBatches, loadNote, hashNoteInput, getSyncDir } from '../store/note-store'
@@ -77,6 +77,7 @@ export function getInsightView(owner: Owner): InsightView {
   if (owner.kind === 'note' && !note) throw new Error('笔记不存在或已移入回收站')
   const value = insight(dir,owner)
   return {
+    pinned: aiRead<PinnedRecommendation[]>(dir, 'pinned-reading', ownerKey(owner)) ?? [],
     insight:value, report: owner.kind === 'dream' ? aiRead<DreamReport>(dir,'reports',owner.id) : null,
     thread:thread(dir,owner), jobs:jobs(dir).filter(j => ownerKey(j.owner) === ownerKey(owner)).sort((a,b) => b.created_at-a.created_at).slice(0,8),
     stale:!!note && !!value && hash(note) !== value.input_hash,
@@ -117,17 +118,49 @@ export function jobAction(id: string, action: 'cancel' | 'retry'): void {
 }
 export function saveFeedback(owner: Owner, feedback: Feedback, recommendationId?: string): void {
   const dir = configDir()
+  const key = ownerKey(owner)
   if (!['helpful','unhelpful','read','irrelevant'].includes(feedback)) throw new Error('无效反馈')
   const bucket = owner.kind === 'dream' ? 'reports' : 'insights'
-  const id = owner.kind === 'dream' ? owner.id : ownerKey(owner)
+  const id = owner.kind === 'dream' ? owner.id : key
   const value = aiRead<NoteInsight | DreamReport>(dir,bucket,id)
-  if (!value) throw new Error('内容不存在')
   if (recommendationId !== undefined) {
-    const rec = value.recommendations.find(r => r.id === recommendationId)
-    if (!rec) throw new Error('推荐不存在')
-    rec.feedback = feedback
-  } else if ('input_hash' in value) value.feedback = feedback
-  aiWrite(dir,bucket,id,value); notify()
+    const pinned = aiRead<PinnedRecommendation[]>(dir, 'pinned-reading', key) ?? []
+    const pin = pinned.find(item => item.id === recommendationId)
+    const rec = value?.recommendations.find(item => pin
+      ? recommendationIdentity(item) === recommendationIdentity(pin.recommendation)
+      : item.id === recommendationId)
+    if (!pin && !rec) throw new Error('推荐不存在')
+    if (pin) {
+      pin.recommendation.feedback = feedback
+      aiWrite(dir, 'pinned-reading', key, pinned)
+    }
+    if (value && rec) {
+      rec.feedback = feedback
+      aiWrite(dir,bucket,id,value)
+    }
+  } else {
+    if (!value || !('input_hash' in value)) throw new Error('内容不存在')
+    value.feedback = feedback
+    aiWrite(dir,bucket,id,value)
+  }
+  notify()
+}
+export function setRecommendationPinned(owner: Owner, recommendationId: string, pin: boolean, identity: string): void {
+  const dir = configDir()
+  const key = ownerKey(owner)
+  const pinned = aiRead<PinnedRecommendation[]>(dir, 'pinned-reading', key) ?? []
+  if (!pin) {
+    aiWrite(dir, 'pinned-reading', key, pinned.filter(item => item.id !== recommendationId))
+  } else {
+    const value = owner.kind === 'dream' ? aiRead<DreamReport>(dir, 'reports', owner.id) : insight(dir, owner)
+    const recommendation = value?.recommendations.find(item => item.id === recommendationId)
+    if (!value || !recommendation || recommendationIdentity(recommendation) !== identity) throw new Error('推荐已更新，请重新选择')
+    if (pinned.some(item => recommendationIdentity(item.recommendation) === identity)) return
+    const sourceIds = new Set([...recommendation.source_ids, ...recommendation.identity_source_ids, recommendation.quality?.source_id])
+    const sources = value.sources.filter(source => sourceIds.has(source.id))
+    aiWrite(dir, 'pinned-reading', key, [{ id: randomUUID(), recommendation, sources }, ...pinned])
+  }
+  notify()
 }
 export function decideCorrection(id: string, decision: 'accept' | 'deny'): void {
   const dir = configDir(); const correction = aiRead<WikiCorrection>(dir,'corrections',id)
@@ -330,8 +363,11 @@ async function retrieve(dir: string, job: AiJob, config: AppConfig, signal: Abor
 }
 
 async function research(dir: string, job: AiJob, config: AppConfig, signal: AbortSignal, text: string): Promise<{body:string;recommendations:NoteInsight['recommendations'];sources:SourceEvidence[];warning:string}> {
-  const prior = [...aiList<NoteInsight>(dir,'insights'),...reports(dir)].flatMap(x => x.recommendations || [])
-    .filter(r => r.feedback === 'read' || r.feedback === 'irrelevant').slice(-20)
+  const previousPins = aiList<PinnedRecommendation[]>(dir, 'pinned-reading').flat().map(item => item.recommendation)
+  const prior = [...new Map([...aiList<NoteInsight>(dir,'insights').flatMap(x => x.recommendations || []),
+    ...reports(dir).flatMap(x => x.recommendations || []), ...previousPins]
+    .filter(item => item.feedback === 'read' || item.feedback === 'irrelevant')
+    .map(item => [recommendationIdentity(item), item])).values()].slice(-20)
     .map(r => ({title:r.title,idea:r.idea,feedback:r.feedback}))
   const plan = await ask(dir,job,'选择值得展开的问题',config,signal,
     '选择最多三个值得展开的问题。先给暂定判断，再给依据、不同解释和边界。必要时建议行动，不强行统一主题。优先找对当前具体判断有帮助的书籍观点，允许论文、访谈。外文书必须提供候选原文书名和作者原名，供后续核查；不要把猜测的中译本当成已核实书目。返回 JSON {"body":"深入分析，不含书籍引文","candidates":[{"title":"候选书/资料","author":"","original_title":"原文书名","original_author":"作者原名","idea":"待核查观点"}],"queries":["抽象议题或书名作者观点核查词，禁止包含用户身份或私事，每条不超过128个字符，优先作者、出版社、大学、专业机构或原始研究资料，可用site:限定，最多六条"]}。没有有益候选可为空。', {notes:text,avoid_repeating:prior},true)

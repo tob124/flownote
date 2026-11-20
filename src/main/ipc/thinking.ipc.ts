@@ -4,7 +4,7 @@ import { join, basename } from 'path'
 import { readPdf } from '../services/pdf-reader'
 import { createHash } from 'crypto'
 import type { Owner, Feedback } from '../../shared/insights'
-import { enqueue, getInsightView, jobAction, saveFeedback, decideCorrection, requestDream } from '../services/thinking-service'
+import { enqueue, getInsightView, jobAction, saveFeedback, setRecommendationPinned, decideCorrection, requestDream } from '../services/thinking-service'
 import { getSyncDir } from '../store/note-store'
 import { aiList, aiRead, aiCommit, ownerKey, reports } from '../store/insight-store'
 import { atomicWrite } from '../store/atomic-file'
@@ -52,6 +52,10 @@ export function registerThinkingIpc():void {
     return jobAction(id,action)
   })
   ipcMain.handle('thinking:feedback',(_e,owner:Owner,feedback:Feedback,id?:string)=>saveFeedback(owner,feedback,id))
+  ipcMain.handle('thinking:pin-reading',(_e,owner:Owner,id:string,pinned:boolean,identity:string)=>{
+    if (typeof id !== 'string' || typeof pinned !== 'boolean' || typeof identity !== 'string') throw new Error('无效的推荐操作')
+    return setRecommendationPinned(owner,id,pinned,identity)
+  })
   ipcMain.handle('thinking:correction',(_e,id:string,decision:'accept'|'deny')=>{
     if (!['accept','deny'].includes(decision)) throw new Error('无效选择')
     return decideCorrection(id,decision)

@@ -2,10 +2,20 @@
 import {afterEach,expect,it,vi} from 'vitest'
 import {act,cleanup,fireEvent,render,screen} from '@testing-library/react'
 import QuickInput from '../src/renderer/components/QuickInput'
+import { formatMarkdown } from '../src/renderer/components/MarkdownFormatBar'
 const addNote = vi.hoisted(() => vi.fn())
 vi.mock('../src/renderer/context/ConfigContext',()=>({useConfig:()=>({config:{sync_dir:'fixture',api_provider:'DeepSeek',api_key:'fixture'}})}))
 vi.mock('../src/renderer/context/NotesContext',()=>({useNotes:()=>({addNote,savedId:null,revealNote:vi.fn()})}))
 afterEach(()=>{cleanup();localStorage.clear();vi.useRealTimers();addNote.mockReset()})
+
+it('formats selections and preserves surrounding Chinese text and link selection', () => {
+  expect(formatMarkdown('段首 重点，结尾', 2, 5, 'bold').value).toBe('段首 **重点**，结尾')
+  expect(formatMarkdown('段首 观点 段尾', 3, 5, 'italic').value).toBe('段首 *观点* 段尾')
+  expect(formatMarkdown('甲\n乙\n保留', 0, 4, 'list').value).toBe('- 甲\n- 乙\n保留')
+  const link = formatMarkdown('有[资料]可读', 1, 5, 'link')
+  expect(link.value).toBe('有[\\[资料\\]](https://)可读')
+  expect(link.value.slice(...link.selection)).toBe('https://')
+})
 function start(polish:()=>Promise<string|null>){
  Object.defineProperty(window,'api',{configurable:true,value:{polish}})
  render(<QuickInput/>)

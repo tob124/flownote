@@ -26,6 +26,17 @@
 .workspace-note strong{font-size:14px;line-height:1.6;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .workspace-note p{font-size:12px;line-height:1.7;color:var(--text-secondary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:6px 0 10px;white-space:normal;overflow-wrap:anywhere}
 .workspace-note>span{font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.workspace-note .workspace-ai-preview{color:color-mix(in srgb,var(--accent) 60%,var(--text-primary))}
+[data-theme=draft] .workspace-note .workspace-ai-preview{color:#315a83}
+.workspace-ai-preview b{font-weight:650}
+.workspace-note[role=checkbox]{position:relative;padding-inline-start:34px}
+.workspace-note[role=checkbox]::before{position:absolute;inset-inline-start:12px;top:19px;content:'';width:14px;height:14px;border:1px solid var(--text-muted);border-radius:3px}
+.workspace-note[aria-checked=true]{background:var(--bg-card);border-color:var(--border)}
+.workspace-note[aria-checked=true]::before{content:'✓';font-size:11px;border-color:var(--accent);background:var(--accent);color:var(--bg-card);text-align:center;line-height:14px}
+.workspace-note:disabled{opacity:.65;cursor:default}
+.library-batch{padding:8px 12px;border-bottom:1px solid var(--border-light);font-size:12px;color:var(--text-secondary);overflow-wrap:anywhere}
+.library-batch-buttons{display:flex;flex-wrap:wrap;gap:2px}
+.library-batch .fn-button{padding:2px 6px}
 .workspace-splitter{width:6px;flex:0 0 6px;cursor:col-resize;touch-action:none;user-select:none;position:relative;z-index:3;background:var(--bg-primary)}
 .workspace-splitter:hover,.workspace-splitter:focus-visible{background:color-mix(in srgb,var(--accent) 30%,var(--bg-primary));outline:0}
 .workspace-reader{display:flex;flex:1;min-width:0;min-height:0;flex-direction:column;position:relative;background:var(--bg-card)}
@@ -54,6 +65,8 @@
 .note-editor .note-edit-form .note-edit-body{font-family:var(--font-sans);font-size:17px;line-height:1.8;min-height:45vh;resize:vertical}
 .note-editor .note-edit-preview{padding:0;font-size:17px;line-height:1.8;max-width:none}
 .note-editor .note-edit-tabs{display:flex;gap:8px}
+.markdown-format-bar{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;flex-shrink:0}
+.markdown-format-bar .fn-button{font-size:12px;min-height:28px;padding:3px 8px}
 .note-editor .note-properties label{margin:10px 0}
 .workspace-document .quick-input-container{display:flex;flex-direction:column;flex:1;min-height:0;max-width:1024px;width:100%;align-self:center;margin:0;padding:32px;border:0;border-radius:0;background:var(--bg-card)}
 .workspace-document .composer-label{display:block;font-size:26px;color:var(--text-primary);margin-bottom:20px;font-weight:600}

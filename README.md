@@ -1,6 +1,6 @@
-# FlowNote 3.0.2
+# FlowNote 3.0.4
 
-3.0.3 改善新建笔记时的输入响应，网页剪藏保存为 Markdown 附件，整理流程使用附件摘要。Windows 检查通过后自动编译并发布安装包。[下载最新版](https://github.com/tob124/flownote/releases/latest)
+3.0.4 加入笔记多选、长笔记摘要预览、Markdown 格式工具和阅读推荐固定，改善窄窗口 Wiki 导航及 Windows 附件打开方式。3.0.3 改善新建笔记的输入响应，并把网页剪藏保存为 Markdown 附件。Windows 检查通过后自动发布安装包。[下载最新版](https://github.com/tob124/flownote/releases/latest)
 
 上一版的 AI、笔记交互修复和反馈按钮说明见 [3.0.1 修复说明](docs/RELEASE-3.0.1.md)。
 

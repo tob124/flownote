@@ -1,3 +1,7 @@
+export type BulkNoteAction = 'favorite' | 'unfavorite' | 'trash'
+export interface BulkNoteTarget { id: string; revision: number }
+export interface BulkNoteResult { completed: string[]; failed: { id: string; reason: string }[] }
+
 export interface NoteFile {
   name: string
   storedName: string

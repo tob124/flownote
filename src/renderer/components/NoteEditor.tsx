@@ -9,6 +9,7 @@ import { noteDisplayTitle } from '../../shared/note-material'
 import { useConfig } from '../context/ConfigContext'
 import { clearNoteDraft, freshNoteDraft, loadNoteDraft, saveNoteDraft } from '../utils/note-draft'
 import AttachmentList from './AttachmentList'
+import MarkdownFormatBar from './MarkdownFormatBar'
 import '../styles/notecard.css'
 
 interface Props {
@@ -26,11 +27,13 @@ export default function NoteEditor({ note, onRefresh, scrollTop=0, onScroll }: P
   const [draft, setDraft] = useState(() => loadNoteDraft(window.localStorage, library, note) ?? freshNoteDraft(note))
   const [editing, setEditing] = useState(() => loadNoteDraft(window.localStorage, library, note) !== null)
   const [preview, setPreview] = useState(false)
+  const [composing, setComposing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [attaching,setAttaching]=useState(false)
   const [conflictNote, setConflictNote] = useState<Note | null>(null)
   const [tip, setTip] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const bodyInput = useRef<HTMLTextAreaElement>(null)
   const alive = useRef(true)
   useEffect(() => { alive.current=true; return () => { alive.current=false } }, [])
   useEffect(() => { if(scrollRef.current) scrollRef.current.scrollTop=scrollTop }, [note.id])
@@ -153,8 +156,12 @@ export default function NoteEditor({ note, onRefresh, scrollTop=0, onScroll }: P
             <label>摘要<textarea rows={2} maxLength={2000} value={draft.summary} onChange={(event) => setDraft((value) => ({ ...value, summary: event.target.value }))} /></label>
             <label>标签（用逗号分隔）<input value={draft.tags} onChange={(event) => setDraft((value) => ({ ...value, tags: event.target.value }))} /></label></details>
             <div className="note-edit-tabs"><button className={!preview ? 'active' : ''} type="button" onClick={() => setPreview(false)}>编辑正文</button><button className={preview ? 'active' : ''} type="button" onClick={() => setPreview(true)}>预览</button></div>
-            {preview ? <div className="note-edit-preview markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm, remarkLineBreaks]}>{draft.raw_content}</ReactMarkdown></div> :
-              <textarea className="note-edit-body" aria-label="笔记正文" rows={14} maxLength={1000000} value={draft.raw_content} onChange={(event) => setDraft((value) => ({ ...value, raw_content: event.target.value }))} />}
+            {preview ? <div className="note-edit-preview markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm, remarkLineBreaks]}>{draft.raw_content}</ReactMarkdown></div> : <div>
+              <MarkdownFormatBar input={bodyInput} disabled={composing || saving} onChange={raw_content => setDraft(value => ({ ...value, raw_content }))}/>
+              <textarea ref={bodyInput} className="note-edit-body" aria-label="笔记正文" rows={14} maxLength={1000000} value={draft.raw_content}
+                onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)}
+                onChange={(event) => setDraft((value) => ({ ...value, raw_content: event.target.value }))} />
+            </div>}
             <div className="editor-actions"><Button variant="primary" type="submit" disabled={saving}>保存修改</Button><span className="editor-hint">关闭后，本机草稿仍会保留</span></div>
           </form>
         ) : <>

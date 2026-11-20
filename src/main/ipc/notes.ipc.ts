@@ -4,7 +4,7 @@ import { loadConfig } from '../store/config-store'
 import { fetchWebClip } from '../services/deepseek-fetch'
 import { attachmentPath, saveWebClip } from '../store/file-store'
 import { IPC_CHANNELS } from '../../shared/types'
-import type { Note, NotePatch, NotePatchResult } from '../../shared/types'
+import type { BulkNoteAction, BulkNoteResult, BulkNoteTarget, Note, NotePatch, NotePatchResult } from '../../shared/types'
 
 export function registerNotesIpc(): void {
   let clipping = false
@@ -68,6 +68,31 @@ export function registerNotesIpc(): void {
     }
   })
   ipcMain.handle(IPC_CHANNELS.NOTES_DELETE, (_e, id: string) => deleteNote(id))
+  ipcMain.handle('notes:bulk', (_e, action: BulkNoteAction, targets: BulkNoteTarget[]): BulkNoteResult => {
+    if (!['favorite', 'unfavorite', 'trash'].includes(action) || !Array.isArray(targets) || targets.length > 1000 ||
+      targets.some(item => !item || typeof item.id !== 'string' || !/^\d{13,}$/.test(item.id) || !Number.isSafeInteger(item.revision))) {
+      throw new Error('批量操作的笔记或动作无效')
+    }
+    const dir = getSyncDir()
+    if (!dir) throw new Error('请先设置同步目录')
+    const result: BulkNoteResult = { completed: [], failed: [] }
+    for (const { id, revision } of new Map(targets.map(item => [item.id, item])).values()) {
+      try {
+        const note = loadNote(id, dir)
+        if (!note) throw new Error('笔记已移除')
+        if ((note.revision ?? 0) !== revision) throw new Error('笔记已有更新，请重试')
+        if (action === 'trash') {
+          if (!deleteNote(id, dir)) throw new Error('无法移入回收站')
+        } else if (!!note.favorite !== (action === 'favorite')) {
+          patchNote(dir, id, revision, { favorite: action === 'favorite' })
+        }
+        result.completed.push(id)
+      } catch (error) {
+        result.failed.push({ id, reason: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    return result
+  })
   ipcMain.handle(IPC_CHANNELS.NOTES_TRASH_LIST, () => {
     const syncDir = loadConfig().sync_dir
     if (!syncDir) throw new Error('sync_dir not configured')

@@ -4,7 +4,7 @@ import {ActionMenu,Button} from './ui/Controls'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkLineBreaks from '../utils/remark-line-breaks'
-import { AI_OUTPUT_WARNING_TOKENS } from '../../shared/insights'
+import { AI_OUTPUT_WARNING_TOKENS, recommendationIdentity } from '../../shared/insights'
 import type { InsightView, Owner, SourceEvidence } from '../../shared/insights'
 import { useDraftGuard } from '../utils/useDraftGuard'
 import { useConfig } from '../context/ConfigContext'
@@ -72,6 +72,13 @@ export default function ThoughtPanel({owner,compact=false,noteLabel='这条笔�
   }
   if(!window.api.thinking)return null
   const value=view?.report || view?.insight
+  const pins = view?.pinned ?? []
+  const pinnedKeys = new Set(pins.map(item => recommendationIdentity(item.recommendation)))
+  const recommendations = [
+    ...pins.map(item => ({ id: item.id, item: item.recommendation, sources: item.sources, pinned: true })),
+    ...(value?.recommendations ?? []).filter(item => !pinnedKeys.has(recommendationIdentity(item)))
+      .map(item => ({ id: item.id, item, sources: value?.sources ?? [], pinned: false }))
+  ]
   const current=view?.jobs.find(j=>j.status==='queued'||j.status==='running')
   const disabled=busy||!!current
   const body=value?.body || ''
@@ -89,7 +96,7 @@ export default function ThoughtPanel({owner,compact=false,noteLabel='这条笔�
       <div className="thought-tabs" role="tablist" aria-label="思考内容">
         {(['response','reading','discussion'] as const).map((item,i)=><button key={item} role="tab" id={panelId+'-'+item}
           tabIndex={tab===item?0:-1} onKeyDown={e=>{const tabs=['response','reading','discussion'] as const;let index=i;if(e.key==='ArrowRight')index=(i+1)%3;else if(e.key==='ArrowLeft')index=(i+2)%3;else if(e.key==='Home')index=0;else if(e.key==='End')index=2;else return;e.preventDefault();setTab(tabs[index]);document.getElementById(panelId+'-'+tabs[index])?.focus({ preventScroll: true })}}
-          aria-selected={tab===item} aria-controls={panelId+'-content'} onClick={()=>setTab(item)}>{['回应','延伸阅读','继续讨论'][i]}{item==='reading'&&value?.recommendations.length?' · '+value.recommendations.length:''}</button>)}
+          aria-selected={tab===item} aria-controls={panelId+'-content'} onClick={()=>setTab(item)}>{['回应','延伸阅读','继续讨论'][i]}{item==='reading'&&recommendations.length?' · '+recommendations.length:''}</button>)}
       </div>
       <div role="tabpanel" id={panelId+'-content'} aria-labelledby={panelId+'-'+tab}>
       {tab==='response' && <>
@@ -111,7 +118,8 @@ export default function ThoughtPanel({owner,compact=false,noteLabel='这条笔�
       {value?.warning && <div className="thought-warning"><strong>部分资料还没有核实</strong><p>{value.warning}</p><p>可先阅读下面的思考；未核实的推荐仅作为线索，不能视为作者已证实的观点。</p></div>}
       {latest?.status==='done' && ['research','dream'].includes(latest.kind) && (value?.sources.some(s=>s.read_status==='failed') || view?.report?.supplement_status==='failed') && <div className="thought-recheck"><button disabled={disabled} onClick={()=>void act(()=>window.api.thinking.action(latest.id,'retry'))}>重试资料核查</button><small>复用已完成的搜索，重新读取失败页面并生成推荐。</small></div>}
       {!value?.recommendations.length && <p className="thought-empty">{current?'正在寻找与这条内容真正相关的观点…':value?.sources.length?'已有资料线索，暂未形成合适的阅读推荐。可以打开来源，或追问一个更具体的问题。':'从一个具体问题出发寻找书籍、文章和不同解释。点击“找些相关观点”开始。'}</p>}
-      {value?.recommendations.map(r=><article className="thought-recommendation" key={r.id}>
+      {recommendations.map(({ id: recommendationId, item: r, sources, pinned }) => <article className="thought-recommendation" data-pinned={pinned} key={recommendationId}>
+        {pinned && <p className="thought-pin-label">已固定</p>}
         <h3>{r.title} {r.author && <small>· {r.author}</small>}</h3>
         {r.original_title && r.original_title!==r.title && <p>{r.original_title}</p>}
         <span className={'thought-evidence '+r.evidence}>{r.evidence==='primary'?'有原始资料支持':r.evidence==='secondary'?'有二手资料支持':'基于模型知识，尚未核实'}</span>
@@ -124,13 +132,16 @@ export default function ThoughtPanel({owner,compact=false,noteLabel='这条笔�
         <p>{r.reading} {r.translation}</p>
         {r.quality ? <p>{r.quality.kind==='rating'?r.quality.platform+' '+r.quality.score+' · '+r.quality.count+' 人评价':'专业书评支持'} · {r.quality.edition} · {new Date(r.quality.checked_at).toLocaleDateString()}<br/>{r.quality.reason}</p>:<p>未记录可核实的评分依据。</p>}
         {r.quote && <blockquote>{r.quote}</blockquote>}
-        {!!r.source_ids.length && <Sources items={value.sources.filter(s=>r.source_ids.includes(s.id))}/>}
+        {(r.source_ids.length > 0 || r.identity_source_ids.length > 0) && <Sources items={sources.filter(s=>r.source_ids.includes(s.id) || r.identity_source_ids.includes(s.id) || r.quality?.source_id === s.id)}/>}
         </details>
-        <ActionMenu label="阅读反馈" items={[
-          {label:'有帮助',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'helpful',r.id))},
-          {label:'我读过了',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'read',r.id))},
-          {label:'与我的问题不相关',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'irrelevant',r.id))}
-        ]}>{r.feedback==='helpful'?'已标记有帮助':r.feedback==='read'?'已读':r.feedback==='irrelevant'?'已标记不相关':'评价这项推荐'}</ActionMenu>
+        <div className="thought-actions">
+          <Button variant="quiet" aria-pressed={pinned} disabled={busy} onClick={()=>void act(()=>window.api.thinking.pinReading({kind,id},recommendationId,!pinned,recommendationIdentity(r)))}>{pinned ? '取消固定' : '固定推荐'}</Button>
+          <ActionMenu label="阅读反馈" items={[
+            {label:'有帮助',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'helpful',recommendationId))},
+            {label:'我读过了',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'read',recommendationId))},
+            {label:'与我的问题不相关',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'irrelevant',recommendationId))}
+          ]}>{r.feedback==='helpful'?'已标记有帮助':r.feedback==='read'?'已读':r.feedback==='irrelevant'?'已标记不相关':'评价这项推荐'}</ActionMenu>
+        </div>
       </article>)}
       <p className="thought-meta">阅读反馈保存在当前资料库。“已读／不相关”会作为后续推荐避免重复的参考；“有帮助”仅记录评价。</p>
       {!!value?.sources.length && <Sources items={value.sources}/>}

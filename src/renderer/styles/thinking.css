@@ -63,3 +63,5 @@
 .thought-reply textarea{border:0;background:transparent;min-height:68px;padding:6px;line-height:1.7}
 .thought-reply button.primary{background:var(--accent);color:var(--bg-primary);white-space:nowrap}
 @media(max-width:850px){.dream-reading{padding:16px}.dream-history{width:175px}.thought-recommendation{padding:14px}.thought-tabs{gap:16px}.thought-reply{flex-wrap:wrap}.thought-reply textarea{flex-basis:100%}}
+.thought-recommendation[data-pinned=true]{border-inline-start:3px solid var(--accent)}
+.thought-pin-label{color:color-mix(in srgb,var(--accent) 60%,var(--text-primary));font-size:12px;font-weight:650}

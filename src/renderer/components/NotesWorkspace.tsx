@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNotes } from '../context/NotesContext'
 import { useConfig } from '../context/ConfigContext'
 import { noteDate } from '../../shared/note-time'
-import { noteDisplayTitle } from '../../shared/note-material'
+import { noteDisplayTitle, noteListPreview } from '../../shared/note-material'
+import type { BulkNoteAction } from '../../shared/types'
 import { mayLeave, readWorkspace, writeWorkspace, type WorkspaceState } from '../utils/workspace'
 import SearchBar from './SearchBar'
 import QuickInput from './QuickInput'
@@ -34,6 +35,11 @@ function Workspace({ dir, onTrash }: { dir: string; onTrash: () => void }): JSX.
     return () => clearTimeout(timer)
   }, [notice, noticeVersion])
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [selecting, setSelecting] = useState(false)
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set())
+  const [confirmBulkTrash, setConfirmBulkTrash] = useState(false)
+  const [batchBusy, setBatchBusy] = useState(false)
+  const [batchNotice, setBatchNotice] = useState('')
   const scrollTimer=useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(()=>()=>{if(scrollTimer.current)clearTimeout(scrollTimer.current);writeWorkspace(dir,prefsRef.current)},[dir])
   const recordScroll=(patch:Partial<WorkspaceState>):void=>{prefsRef.current={...prefsRef.current,...patch};if(scrollTimer.current)clearTimeout(scrollTimer.current);scrollTimer.current=setTimeout(()=>writeWorkspace(dir,prefsRef.current),150)}
@@ -44,7 +50,41 @@ function Workspace({ dir, onTrash }: { dir: string; onTrash: () => void }): JSX.
   const previousQuery = useRef(queryKey)
   const snapshotReady = useRef(false)
   const currentIds = useMemo(() => filteredNotes.map(n => n.id), [filteredNotes])
+  const filteredIds = useMemo(() => new Set(currentIds), [currentIds])
   const notesById = useMemo(() => new Map(notes.map(note => [note.id, note])), [notes])
+  const chosenIds = useMemo(() => [...chosen].filter(id => filteredIds.has(id)), [chosen, filteredIds])
+  useEffect(() => { setChosen(new Set()); setConfirmBulkTrash(false) }, [queryKey])
+
+  function toggleChoice(id: string): void {
+    setChosen(previous => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else if (next.size < 1000) next.add(id)
+      return next
+    })
+    setConfirmBulkTrash(false)
+  }
+  async function runBulk(action: BulkNoteAction): Promise<void> {
+    if (batchBusy || !chosenIds.length || !mayLeave()) return
+    setBatchBusy(true)
+    setBatchNotice('')
+    setConfirmBulkTrash(false)
+    try {
+      const targets = chosenIds.map(id => ({ id, revision: notesById.get(id)?.revision ?? 0 }))
+      const { completed, failed } = await window.api.notes.bulk(action, targets)
+      const done = new Set(completed)
+      if (action === 'trash' && selected && done.has(selected)) {
+        setSelected(null); update({ selected: null }); setAi(false)
+      }
+      setChosen(previous => new Set([...previous].filter(id => !done.has(id))))
+      const verb = action === 'trash' ? '已移入回收站' : action === 'favorite' ? '已收藏' : '已取消收藏'
+      const reasons = [...new Set(failed.map(item => item.reason))].slice(0, 3).join('、')
+      setBatchNotice(`${verb} ${completed.length} 篇${failed.length ? `，${failed.length} 篇未处理（${reasons}）` : ''}。`)
+      await loadNotes()
+    } catch (error) {
+      setBatchNotice(`批量操作失败。 ${String(error)}`)
+    } finally { setBatchBusy(false) }
+  }
   const hasUpdates = useMemo(
     () => snapshot.length !== currentIds.length || snapshot.some((id, index) => id !== currentIds[index]),
     [snapshot, currentIds]
@@ -153,14 +193,42 @@ function Workspace({ dir, onTrash }: { dir: string; onTrash: () => void }): JSX.
       <header className="library-heading"><h1>笔记</h1><Button variant="primary" icon="note" onClick={newNote}>新建笔记</Button></header>
       <SearchBar/>
       <div className="library-meta"><span>{snapshot.length} 篇{isRefreshing ? ' · 正在刷新…' : ''}</span><Button variant="quiet" icon="trash" iconOnly aria-label="回收站" onClick={() => navigate(onTrash)}/></div>
-      <div className="library-actions"><Button variant="quiet" disabled={!selected} onClick={() => selected && locate(selected)}>定位到当前</Button>{hasUpdates && <Button variant="quiet" onClick={applyUpdates}>有更新</Button>}</div>
+      <div className="library-actions">
+        <Button variant="quiet" disabled={batchBusy} aria-pressed={selecting} onClick={() => { setSelecting(!selecting); setChosen(new Set()); setConfirmBulkTrash(false); setBatchNotice('') }}>{selecting ? '退出多选' : '多选'}</Button>
+        {!selecting && <Button variant="quiet" disabled={!selected} onClick={() => selected && locate(selected)}>定位到当前</Button>}
+        {hasUpdates && <Button variant="quiet" onClick={applyUpdates}>有更新</Button>}
+      </div>
+      {selecting && <div className="library-batch">
+        <span role="status">已选 {chosenIds.length} 篇{chosenIds.length === 1000 ? '（本次已达上限）' : ''}</span>
+        <div className="library-batch-buttons">
+          <Button variant="quiet" disabled={batchBusy || !chosenIds.length} onClick={() => void runBulk('favorite')}>批量收藏</Button>
+          <Button variant="quiet" disabled={batchBusy || !chosenIds.length} onClick={() => void runBulk('unfavorite')}>取消收藏</Button>
+          <Button variant="quiet" disabled={batchBusy || !chosenIds.length} onClick={() => setConfirmBulkTrash(true)}>移至回收站</Button>
+        </div>
+        {confirmBulkTrash && <div role="group" aria-label="批量移除确认">
+          <span>将这 {chosenIds.length} 篇笔记移入回收站？</span>
+          <Button variant="danger" disabled={!chosenIds.length} onClick={() => void runBulk('trash')}>确认批量移除</Button>
+          <Button variant="quiet" onClick={() => setConfirmBulkTrash(false)}>取消</Button>
+        </div>}
+        {batchNotice && <p role="status">{batchNotice}</p>}
+      </div>}
       <div className="workspace-note-list" ref={listScroll} onScroll={e => recordScroll({ listScroll: e.currentTarget.scrollTop })} aria-label="笔记列表">
         {isLoading && !notes.length && <p className="workspace-empty">正在读取笔记…</p>}
         {!isLoading && !filteredNotes.length && <p className="workspace-empty">没有符合当前条件的笔记</p>}
-        {snapshot.slice((page-1)*30, page*30).map(id => { const n=notesById.get(id); return !n ? <div key={id} className="workspace-note" aria-disabled="true">已移除</div> : <button key={n.id} id={'note-' + n.id} className="workspace-note" data-located={highlight===n.id} aria-current={n.id === selected && !creating ? 'true' : undefined} onClick={() => select(n.id)}>
-          <strong>{noteDisplayTitle(n)}</strong><p>{n.raw_content || n.attachments?.find(file => file.summary)?.summary}</p>
-          <span>{noteDate(n)}{n.favorite ? ' · 已收藏' : ''}{n.ai_status === 'failed' ? ' · 整理失败' : n.ai_status === 'processing' ? ' · 整理中' : n.ai_status === 'pending' ? ' · 等待整理' : ''}</span>
-        </button>})}
+        {snapshot.slice((page-1)*30, page*30).map(id => {
+          const n = notesById.get(id)
+          if (!n) return <div key={id} className="workspace-note" aria-disabled="true">已移除</div>
+          const title = noteDisplayTitle(n)
+          const preview = noteListPreview(n)
+          return <button key={id} id={'note-' + id} className="workspace-note" data-located={highlight===id}
+            role={selecting ? 'checkbox' : undefined} aria-checked={selecting ? chosen.has(id) : undefined} aria-label={selecting ? title : undefined}
+            disabled={selecting && (batchBusy || !filteredIds.has(id))}
+            aria-current={!selecting && id === selected && !creating ? 'true' : undefined}
+            onClick={() => selecting ? toggleChoice(id) : select(id)}>
+            <strong>{title}</strong><p className={preview.summarized ? 'workspace-ai-preview' : undefined}>{preview.summarized && <b>AI 摘要 · </b>}{preview.text}</p>
+            <span>{noteDate(n)}{n.favorite ? ' · 已收藏' : ''}{n.ai_status === 'failed' ? ' · 整理失败' : n.ai_status === 'processing' ? ' · 整理中' : n.ai_status === 'pending' ? ' · 等待整理' : ''}</span>
+          </button>
+        })}
       </div>
       <nav className="library-pagination" aria-label="笔记分页"><Button variant="quiet" disabled={page<=1} onClick={()=>changePage(page-1)}>上一页</Button><label><input aria-label="页码" type="number" min={1} max={pageCount} value={page} onChange={e=>changePage(Number(e.target.value)||1)}/> / {pageCount}</label><Button variant="quiet" disabled={page>=pageCount} onClick={()=>changePage(page+1)}>下一页</Button></nav>
     </SpatialPanel>

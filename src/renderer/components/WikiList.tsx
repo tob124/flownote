@@ -13,7 +13,7 @@ function isCurrentMonth(year: number, month: number): boolean {
   return now.getFullYear() === year && now.getMonth() + 1 === month
 }
 
-export default function WikiList(): JSX.Element {
+export default function WikiList({ onSelect }: { onSelect: () => void }): JSX.Element {
   const { files, sealedFiles, currentFile, selectFile, selectSealed, wikiStatus } = useWikis()
 
   // 封存项并入各自原来所属的月份分组，与普通 wiki 一起展示
@@ -57,11 +57,19 @@ export default function WikiList(): JSX.Element {
     const isActive = file.filename === currentFile
     const isSealed = file.sealed
     return (
-      <div
+      <button
+        type="button"
         key={file.filename}
-        onClick={() => void (isSealed ? selectSealed(file.filename) : selectFile(file.filename))}
+        aria-current={isActive ? 'page' : undefined}
+        onClick={() => {
+          void (isSealed ? selectSealed(file.filename) : selectFile(file.filename))
+          onSelect()
+        }}
         style={{
           padding: '8px 16px 8px 24px',
+          width: '100%',
+          textAlign: 'start',
+          border: 0,
           cursor: 'pointer',
           color: isActive ? 'var(--accent)' : isSealed ? 'var(--text-muted)' : 'var(--text-secondary)',
           background: isActive ? 'var(--bg-hover)' : 'transparent',
@@ -110,7 +118,7 @@ export default function WikiList(): JSX.Element {
         {isSealed && !isActive && (
           <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 4 }}>已封存</span>
         )}
-      </div>
+      </button>
     )
   }
 
@@ -139,7 +147,7 @@ export default function WikiList(): JSX.Element {
           background: 'var(--bg-secondary)'
         }}
       >
-        <span>Wiki Files</span>
+        <span>Wiki 文件</span>
         {wikiStatus === 'updating' && (
           <span
             style={{

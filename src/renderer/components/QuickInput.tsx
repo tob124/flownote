@@ -6,6 +6,7 @@ import { useConfig } from '../context/ConfigContext'
 import '../styles/quickinput.css'
 import { useDraftGuard } from '../utils/useDraftGuard'
 import AttachmentSummaryEditor from './AttachmentSummaryEditor'
+import MarkdownFormatBar from './MarkdownFormatBar'
 
 // 轻量语音输入：浏览器原生 Web Speech API（非神经网络）
 type SpeechRecognitionCtor = new () => SpeechRecognitionConfig
@@ -271,6 +272,7 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   return (
     <div className={'quick-input-container'+(expanded&&!workspace?' expanded':'')}>
       <label className="composer-label" htmlFor="quick-note">{workspace?'新建笔记':'写下一条记录'}</label>
+      <MarkdownFormatBar input={textInput} onChange={setText} disabled={sending || polishing || composing}/>
       <textarea ref={textInput} id="quick-note" className={'quick-input'+(expanded&&!workspace?' expanded':'')}
         placeholder="此刻有什么值得记下来？" value={text} onChange={e=>setText(e.target.value)}
         onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}

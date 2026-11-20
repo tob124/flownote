@@ -1,6 +1,6 @@
 {
   "name": "flownote",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "FlowNote - Personal Knowledge Management Tool",
   "author": "FlowNote",
   "main": "./out/main/index.js",
@@ -49,6 +49,7 @@
     "electron": "^30.5.1",
     "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
+    "electron-winstaller": "5.4.0",
     "jsdom": "25.0.1",
     "playwright-core": "1.55.0",
     "typescript": "^5.4.0",

@@ -26,7 +26,15 @@ jobs:
       - run: npm run test:run
       - run: node --test scripts/publish-release.test.mjs
       - run: npm run test:e2e
+      - run: node scripts/verify-library-improvements.mjs
       - run: npm run package:win
+      - name: Verify fresh installation, upgrade and shortcut icons
+        shell: powershell
+        run: ./scripts/verify-windows-installer.ps1
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Verify attachment workflow in the installed application
+        run: node scripts/verify-attachment-summaries.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: FlowNote-Windows-x64

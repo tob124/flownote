@@ -25,8 +25,13 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
   const [pendingDelete,setPendingDelete]=useState<string | null>(null)
   const [editingSummary, setEditingSummary] = useState<string | null>(null)
   const [previewFile, setPreviewFile] = useState<NoteFile | null>(null)
-  async function open(storedName:string,reveal=false):Promise<void>{
-    try{const result=await window.api.files.open(note.id,storedName,reveal);if(!result.ok)onNotify(result.error || '打开失败')}catch(error){onNotify(String(error))}
+  async function open(storedName:string,action:boolean | 'choose'=false):Promise<void>{
+    try {
+      const result = await window.api.files.open(note.id, storedName, action)
+      if (result.cancelled) onNotify('已取消选择打开方式')
+      else if (result.pickerClosed) onNotify('已返回 FlowNote。若附件未打开，可重新选择应用。')
+      else if (!result.ok) onNotify(result.error || '打开失败')
+    } catch (error) { onNotify(String(error)) }
   }
   const [missing, setMissing] = useState<Set<string>>(new Set())
   const [imgUrls, setImgUrls] = useState<Record<string, string | null>>({})
@@ -121,6 +126,7 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
       <ActionMenu label={'附件操作：'+a.name} items={[
         {label:a.summary?'编辑摘要':'添加摘要',onSelect:()=>setEditingSummary(a.storedName)},
         ...(a.sourceUrl?[{label:'使用默认应用打开',onSelect:()=>void open(a.storedName)}]:[]),
+        ...(window.api.files.canChooseApplication ? [{label:'选择打开方式…',onSelect:()=>void open(a.storedName,'choose')}] : []),
         {label:'在文件夹中显示',onSelect:()=>void open(a.storedName,true)},
         ...(missing.has(a.storedName)?[{label:'补齐文件',onSelect:()=>void replaceMissing(a.storedName)}]:[]),
         {label:'移除附件',danger:true,separator:true,onSelect:()=>setPendingDelete(a.storedName)}

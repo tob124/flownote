@@ -13,9 +13,10 @@ vi.mock('../src/main/services/deepseek-search',async(importOriginal)=>({...await
 vi.mock('../src/main/services/source-reader',()=>({readPublicPage:env.page}))
 import { GenerationError } from '../src/main/llm/thinking-client'
 import { saveNote, loadNote, patchNote, hashNoteInput } from '../src/main/store/note-store'
-import { enqueue, tickThinking, getInsightView, decideCorrection, initializeThinking, jobAction, saveFeedback } from '../src/main/services/thinking-service'
+import { enqueue, tickThinking, getInsightView, decideCorrection, initializeThinking, jobAction, saveFeedback, setRecommendationPinned } from '../src/main/services/thinking-service'
 import { aiRead, aiWrite, jobs, reports, readThinkingState } from '../src/main/store/insight-store'
-import type { Feedback, NoteInsight, WikiCorrection } from '../src/shared/insights'
+import type { Feedback, NoteInsight, Recommendation, WikiCorrection } from '../src/shared/insights'
+import { recommendationIdentity } from '../src/shared/insights'
 const usage={input:10,output:20,searches:0}
 const answer=(value:unknown)=>({text:JSON.stringify(value),usage})
 beforeEach(()=>{
@@ -27,6 +28,33 @@ beforeEach(()=>{
 })
 afterEach(()=>{rmSync(env.dir,{recursive:true,force:true});rmSync(process.env.FLOWNOTE_LOCAL_DATA!,{recursive:true,force:true});delete process.env.FLOWNOTE_LOCAL_DATA})
 describe('persistent thinking workflow',()=>{
+  it('keeps pinned sources and feedback after refreshed results reuse a legacy recommendation ID', () => {
+    const noteId = saveNote(env.dir, '读书记录')
+    const owner = { kind: 'note', id: noteId } as const
+    const rec: Recommendation = {
+      id: '0', title: '第一本书', author: '测试作者', original_title: '', translation: '',
+      question: '', idea: '', relevance: '', limits: '', reading: '', attribution: 'author',
+      identity_source_ids: ['source'], source_ids: [], evidence: 'unverified'
+    }
+    const source = {id:'source',title:'原版资料',url:'https://example.org/source',text:'原文',kind:'primary' as const,fetched_at:1}
+    const value: NoteInsight = {
+      schema_version:1,id:'old-result',owner,input_hash:hashNoteInput('读书记录'),created_at:1,body:'',skipped:false,
+      recommendations:[rec],sources:[source],usage
+    }
+    aiWrite(env.dir,'insights','note_'+noteId,value)
+    setRecommendationPinned(owner, '0', true, recommendationIdentity(rec))
+    aiWrite(env.dir,'insights','note_'+noteId,{...value,id:'new-result', recommendations:[{...rec,title:'另一本书'}],sources:[]})
+    initializeThinking(env.dir)
+    const [pin] = getInsightView(owner).pinned
+    expect(pin.recommendation).toEqual(rec)
+    expect(pin.sources).toEqual([source])
+    expect(() => setRecommendationPinned(owner, '0', true, recommendationIdentity(rec))).toThrow('推荐已更新')
+    saveFeedback(owner,'read',pin.id)
+    expect(getInsightView(owner).pinned[0].recommendation.feedback).toBe('read')
+    expect(getInsightView(owner).insight?.recommendations[0].feedback).toBeUndefined()
+    setRecommendationPinned(owner,pin.id,false,recommendationIdentity(rec))
+    expect(getInsightView(owner).pinned).toEqual([])
+  })
   it('retries failed page reads without paying for completed searches again',async()=>{
     const id=saveNote(env.dir,'检验重要决策中的直觉')
     env.generate.mockResolvedValue(answer({body:'一个有边界的解释',queries:['expert intuition evidence'],candidates:[],recommendations:[]}))

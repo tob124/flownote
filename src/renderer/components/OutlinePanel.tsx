@@ -15,22 +15,6 @@ export default function OutlinePanel({
   onClose
 }: Props): JSX.Element {
 
-  if (headings.length === 0) {
-    return (
-      <div
-        style={{
-          width: 200,
-          minWidth: 200,
-          borderLeft: '1px solid var(--border-light)',
-          background: 'var(--bg-primary)',
-          padding: 12
-        }}
-      >
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>无标题</div>
-      </div>
-    )
-  }
-
   return (
     <div
       style={{
@@ -66,18 +50,26 @@ export default function OutlinePanel({
             fontSize: 13
           }}
           onClick={onClose}
+          aria-label="关闭 Wiki 大纲"
           title="隐藏大纲"
         >
           ×
         </button>
       </div>
       <div style={{ padding: '6px 0' }}>
+        {!headings.length && <p className="wiki-outline-empty">正文没有标题</p>}
         {headings.map((h) => (
-          <div
+          <button
+            type="button"
             key={h.id}
             onClick={() => onNavigate(h.id)}
+            aria-current={activeId === h.id ? 'location' : undefined}
             style={{
               padding: '4px 12px 4px ' + (12 + (h.level - 1) * 12) + 'px',
+              display: 'block',
+              width: '100%',
+              textAlign: 'start',
+              border: 0,
               cursor: 'pointer',
               fontSize: 12,
               color: activeId === h.id ? 'var(--accent)' : 'var(--text-secondary)',
@@ -91,7 +83,7 @@ export default function OutlinePanel({
             title={h.text}
           >
             {h.text}
-          </div>
+          </button>
         ))}
       </div>
     </div>

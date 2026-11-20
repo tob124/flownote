@@ -39,3 +39,13 @@ export function noteOrganizationText(note: Note, attachmentBudget = 720): string
 export function noteDisplayTitle(note: Note): string {
   return note.title || note.raw_content.trim().slice(0, 60) || note.attachments?.[0]?.name || '无标题笔记'
 }
+
+export function noteListPreview(note: Note): { text?: string; summarized: boolean } {
+  const limit = 160
+  const body = note.raw_content.trim()
+  if (!body) return { text: note.attachments?.find(file => file.summary)?.summary, summarized: false }
+  if (body.length <= limit) return { text: note.raw_content, summarized: false }
+  const summary = note.summary?.trim()
+  const summarized = !!summary && !note.manual_fields?.includes('summary')
+  return { text: compactText(summary || body, limit), summarized }
+}

@@ -9,12 +9,17 @@ import { useWikis } from '../context/WikisContext'
 import { useConfig } from '../context/ConfigContext'
 import WikiSearch from '../components/WikiSearch'
 import { Button } from '../components/ui/Controls'
+import '../styles/wiki-layout.css'
 
 const WikiMarkdown = memo(MarkdownViewer)
+const NARROW_WIKI = '(max-width: 1060px)'
 
 export default function WikisPage(): JSX.Element {
   const { currentContent, currentFile, currentIsSealed, loadList, selectFile } = useWikis()
   const { config, isLoaded, save } = useConfig()
+  const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW_WIKI).matches)
+  const [showFiles, setShowFiles] = useState(true)
+  const [drawer, setDrawer] = useState<'files' | 'outline' | null>(null)
   const [showOutline, setShowOutline] = useState(config.wiki_outline_open ?? true)
   const [showMinimap, setShowMinimap] = useState(config.wiki_minimap_open ?? true)
   const [diffLines, setDiffLines] = useState<Set<string> | null>(null)
@@ -32,7 +37,23 @@ export default function WikisPage(): JSX.Element {
   const searchButton = useRef<HTMLButtonElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
   const viewer = useRef<HTMLDivElement>(null)
+  const filesButton = useRef<HTMLButtonElement>(null)
+  const outlineButton = useRef<HTMLButtonElement>(null)
+  const filePanel = useRef<HTMLElement>(null)
+  const outlinePanel = useRef<HTMLElement>(null)
+  const filesOpen = narrow ? drawer === 'files' : showFiles
+  const outlineOpen = currentContent !== null && (narrow ? drawer === 'outline' : showOutline)
   const getContainer = useCallback(() => viewer.current?.querySelector<HTMLElement>('.markdown-body') ?? null, [])
+
+  useEffect(() => {
+    const media = window.matchMedia(NARROW_WIKI)
+    const resize = (): void => { setNarrow(media.matches); setDrawer(null) }
+    media.addEventListener('change', resize)
+    return () => media.removeEventListener('change', resize)
+  }, [])
+  useEffect(() => {
+    if (drawer) (drawer === 'files' ? filePanel : outlinePanel).current?.querySelector('button')?.focus()
+  }, [drawer])
 
   useEffect(() => {
     function find(event: KeyboardEvent): void {
@@ -61,9 +82,21 @@ export default function WikisPage(): JSX.Element {
   }, [isLoaded])
 
   function toggleOutline(): void {
+    if (narrow) { setDrawer(drawer === 'outline' ? null : 'outline'); return }
     const v = !showOutline
     setShowOutline(v)
     void save({ ...config, wiki_outline_open: v })
+  }
+
+  function closeOutline(): void {
+    if (narrow) setDrawer(null)
+    else toggleOutline()
+    outlineButton.current?.focus()
+  }
+  function closeFiles(): void {
+    if (narrow) setDrawer(null)
+    else setShowFiles(false)
+    filesButton.current?.focus()
   }
 
   function toggleMinimap(): void {
@@ -160,7 +193,7 @@ export default function WikisPage(): JSX.Element {
       0,
       container.scrollTop + offset - 12 // 留一点顶部间距，不和工具条贴边
     )
-    container.scrollTo({ top: target, behavior: 'smooth' })
+    container.scrollTo({ top: target, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
   }
 
   // 当前活跃 wiki 的诊断：{category}_{YYYY}_{MM}.md（已封存文件不匹配，视为无活跃项）
@@ -185,9 +218,13 @@ export default function WikisPage(): JSX.Element {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
-      <WikiList />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    <div className="wiki-layout" data-narrow={narrow} onKeyDown={event => {
+      if (event.key !== 'Escape' || event.defaultPrevented || !drawer || searchOpen || sealConfirm) return
+      event.preventDefault()
+      if (drawer === 'files') closeFiles()
+      else closeOutline()
+    }}>
+      <div className="wiki-reader">
         {
           <div
             style={{
@@ -200,23 +237,19 @@ export default function WikisPage(): JSX.Element {
               background: 'var(--bg-secondary)'
             }}
           >
+            <Button ref={filesButton} variant="quiet" icon="book" aria-controls="wiki-files-panel" aria-expanded={filesOpen}
+              onClick={() => narrow ? setDrawer(drawer === 'files' ? null : 'files') : setShowFiles(!showFiles)}>Wiki 文件</Button>
             <Button ref={searchButton} variant="quiet" icon="search" title="搜索 Wiki（Ctrl+F）" aria-expanded={searchOpen}
               onClick={() => { setSearchOpen(true); searchInput.current?.focus() }}>搜索 Wiki</Button>
             {currentContent !== null && <>
-            <button
-              className="quick-input-btn"
-              onClick={toggleOutline}
-              title="展开/隐藏侧边栏大纲"
-            >
-              {showOutline ? '◀ 收起大纲' : '☰ 大纲'}
-            </button>
-            <button
+            <Button ref={outlineButton} variant="quiet" onClick={toggleOutline} aria-controls="wiki-outline-panel" aria-expanded={outlineOpen}>大纲</Button>
+            {!narrow && <button
               className={`quick-input-btn${showMinimap ? ' active' : ''}`}
               onClick={toggleMinimap}
               title="展开/隐藏代码概览 (Minimap)"
             >
               {showMinimap ? '⤢ 概览' : '⤡ 概览'}
-            </button>
+            </button>}
             {!currentIsSealed && diffLines && diffLines.size > 0 && (
               <button
                 className={`quick-input-btn${highlightDiff ? ' active' : ''}`}
@@ -260,8 +293,12 @@ export default function WikisPage(): JSX.Element {
             📦 正在查看已封存内容——历史快照，点击列表中其它条目可切换
           </div>
         )}
-        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <div ref={viewer} style={{ flex: 1, position: 'relative', minWidth: 0, display: 'flex' }}>
+        <div className="wiki-reading-area">
+          <nav id="wiki-files-panel" className="wiki-panel wiki-file-panel" ref={filePanel} aria-label="Wiki 文件" hidden={!filesOpen}>
+            <Button variant="quiet" onClick={closeFiles} aria-label="关闭 Wiki 文件">关闭</Button>
+            <WikiList onSelect={() => { if (narrow) { setDrawer(null); viewer.current?.focus() } }}/>
+          </nav>
+          <div ref={viewer} className="wiki-document" tabIndex={-1} aria-label="Wiki 正文">
             <WikiMarkdown
               content={currentContent}
               diffLines={highlightDiff ? diffLines : null}
@@ -270,15 +307,18 @@ export default function WikisPage(): JSX.Element {
             />
             <CustomScrollbar getContainer={getContainer} />
           </div>
-          {showOutline && (
+          <nav id="wiki-outline-panel" className="wiki-panel wiki-outline-panel" ref={outlinePanel} aria-label="Wiki 大纲" hidden={!outlineOpen}>
             <OutlinePanel
               headings={headings}
               activeId={activeId}
-              onNavigate={navigate}
-              onClose={() => setShowOutline(false)}
+              onNavigate={id => {
+                navigate(id)
+                if (narrow) { setDrawer(null); viewer.current?.focus({preventScroll:true}) }
+              }}
+              onClose={closeOutline}
             />
-          )}
-          {showMinimap && (
+          </nav>
+          {!narrow && showMinimap && (
             <Minimap
               headings={headings}
               map={map}

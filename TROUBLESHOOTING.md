@@ -21,7 +21,7 @@
 ## 2. 打包（electron-builder 26.8.1 / NSIS）
 
 - **winCodeSign 符号链接坑（最重要）**：electron-builder 26 的 **rcedit 内置于 winCodeSign 包**；该 7z 含 `darwin/*.dylib` 符号链接，**非管理员进程解压报"客户端没有所需的特权"**。后果链：`signAndEditExecutable: true` 时 → rcedit 无法执行 → **exe 图标打不上** → 且 NSIS 安装器步骤同样失败，整个打包挂掉。
-  - 当前配置：`signAndEditExecutable: false`（electron-builder.yml）——应用 exe 保持默认 Electron 图标，但窗口图标（asar 内 icon.png）与**安装包图标**（NSIS 编译期嵌入 win.icon 转换的 ico）都正常。
+  - 当前配置保留 `signAndEditExecutable: false`。Windows 打包钩子用已有安装器依赖提供的 rcedit 写入 FlowNote.exe 图标，避开含符号链接的签名工具归档。NSIS 快捷方式直接使用该可执行文件的图标。
   - 彻底修复 exe 图标：**管理员终端**执行 `npx electron-builder --win`（或将 `signAndEditExecutable` 改回 true）。也可开 Windows 开发者模式。已验证：普通权限下无解（缓存 hash 含时间戳，无法手工预置解压目录）。
   - 曾尝试的无效路径（勿重复）：手工解压 winCodeSign 到缓存（hash 每轮变化）、PS/cmd 传参跑 rcedit（引号被吃，须用 node execFileSync）。
 - **`package:win` 脚本的 prune dance 很脆弱**：`npm prune --omit=dev && npm i electron electron-builder && npx electron-builder --win && npm install`——中途任何一步失败会把 node_modules 弄残（electron-vite 直接消失）。**直接 `npx electron-builder --win` 即可**（files 白名单只打 out/** 与 package.json，node_modules 本就不进包）。

@@ -1,6 +1,6 @@
 import type { AiJob, Owner, Feedback, InsightView, DreamReport } from '../shared/insights'
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Note, NotePatch, NotePatchResult, AppConfig, DreamMeta, NotificationItem, NoteFile } from '../shared/types'
+import type { Note, NotePatch, NotePatchResult, AppConfig, DreamMeta, NotificationItem, NoteFile, BulkNoteAction, BulkNoteTarget, BulkNoteResult } from '../shared/types'
 import type { WikiSearchResult } from '../shared/wiki-search'
 
 const api = {
@@ -11,6 +11,7 @@ const api = {
     reply: (owner:Owner,text:string):Promise<AiJob> => ipcRenderer.invoke('thinking:reply',owner,text),
     action: (id:string,action:'cancel'|'retry'):Promise<void> => ipcRenderer.invoke('thinking:action',id,action),
     feedback: (owner:Owner,feedback:Feedback,id?:string):Promise<void> => ipcRenderer.invoke('thinking:feedback',owner,feedback,id),
+    pinReading: (owner:Owner,id:string,pinned:boolean,identity:string):Promise<void> => ipcRenderer.invoke('thinking:pin-reading',owner,id,pinned,identity),
     correction: (id:string,decision:'accept'|'deny'):Promise<void> => ipcRenderer.invoke('thinking:correction',id,decision),
     reports: ():Promise<DreamReport[]> => ipcRenderer.invoke('thinking:reports'),
     jobs: ():Promise<AiJob[]> => ipcRenderer.invoke('thinking:jobs'),
@@ -27,6 +28,7 @@ const api = {
     patch: (id: string, revision: number, patch: NotePatch): Promise<NotePatchResult> =>
       ipcRenderer.invoke('notes:patch', id, revision, patch),
     delete: (id: string): Promise<boolean> => ipcRenderer.invoke('notes:delete', id),
+    bulk: (action: BulkNoteAction, targets: BulkNoteTarget[]): Promise<BulkNoteResult> => ipcRenderer.invoke('notes:bulk', action, targets),
     trashList: (): Promise<Note[]> => ipcRenderer.invoke('notes:trash-list'),
     restore: (id: string): Promise<boolean> => ipcRenderer.invoke('notes:restore', id),
     deleteForever: (id: string): Promise<boolean> => ipcRenderer.invoke('notes:delete-forever', id)
@@ -104,12 +106,13 @@ const api = {
       ipcRenderer.invoke('fonts:get-path', file)
   },
   files: {
+    canChooseApplication: process.platform === 'win32',
     readWebClip: (noteId: string, storedName: string): Promise<string> => ipcRenderer.invoke('files:read-web-clip', noteId, storedName),
     select: (): Promise<NoteFile[]> => ipcRenderer.invoke('files:select'),
     check: (storedNames: string[]): Promise<Record<string, boolean>> =>
       ipcRenderer.invoke('files:check', storedNames),
-    open: (noteId: string, storedName: string, reveal = false): Promise<{ok:boolean;error?:string}> =>
-      ipcRenderer.invoke('files:open', noteId, storedName, reveal),
+    open: (noteId: string, storedName: string, action: boolean | 'choose' = false): Promise<{ok:boolean;error?:string;cancelled?:boolean;pickerClosed?:boolean}> =>
+      ipcRenderer.invoke('files:open', noteId, storedName, action),
     path: (storedName: string): Promise<string | null> =>
       ipcRenderer.invoke('files:get-path', storedName),
     attach: (noteId: string, files: NoteFile[]): Promise<boolean> =>
