@@ -26,6 +26,6 @@ export function registerFontIpc(): void {
   ipcMain.handle(IPC_CHANNELS.FONTS_GET_PATH, (_e, file: string): string | null => {
     const path = getFontPath(file)
     // 使用自定义协议返回同源 URL，避免 file:// 跨源被拦截导致字体无法加载
-    return path ? `flownote-file://${encodeURIComponent(path)}` : null
+    return path ? `flownote-file://font/${encodeURIComponent(file)}` : null
   })
 }

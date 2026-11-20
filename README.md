@@ -1,6 +1,6 @@
-# FlowNote 3.0.4
+# FlowNote 3.0.5
 
-3.0.4 加入笔记多选、长笔记摘要预览、Markdown 格式工具和阅读推荐固定，改善窄窗口 Wiki 导航及 Windows 附件打开方式。3.0.3 改善新建笔记的输入响应，并把网页剪藏保存为 Markdown 附件。Windows 检查通过后自动发布安装包。[下载最新版](https://github.com/tob124/flownote/releases/latest)
+3.0.5 加入附件内置预览。点击附件可以直接查看图片、PDF、Markdown 和纯文本，或播放常见格式的音视频。预览窗口也提供用系统应用打开的入口。Windows 检查通过后自动发布安装包。[下载最新版](https://github.com/tob124/flownote/releases/latest)
 
 上一版的 AI、笔记交互修复和反馈按钮说明见 [3.0.1 修复说明](docs/RELEASE-3.0.1.md)。
 
@@ -256,5 +256,6 @@ src/
 
 - **Wiki 搜索**：打开 Wiki 后点「搜索 Wiki」或按 Ctrl+F。默认在当前正文高亮并逐处跳转，切换到「所有 Wiki」可查活跃 Wiki 和封存快照。所有 Wiki 显示按文件分组的 Markdown 摘录。
 - **网页剪藏**：在「新建笔记 → 输入工具 → 剪藏网页」填写公开链接。DeepSeek Fetch 取得的正文和来源链接保存为 Markdown 附件，点击可在应用内阅读。可以只保存附件，也可以附上自己的笔记。
+- 点击附件名称可在 FlowNote 中查看图片、PDF、Markdown、纯文本，或播放常见格式的音视频。其他格式可从预览窗口用系统应用打开。
 - **附件摘要**：通过附件的摘要入口补写或编辑摘要。网页、UTF-8 文本和有文字层的 PDF 会尝试在本地生成简短摘录。分类、Wiki、Dream 和 AI 思考只读取摘要，留空时跳过该附件。旧式剪藏正文保留在原笔记，能识别旧版来源标记时，整理流程会从剪藏段落提取摘要。
 - **联网研究**：延伸阅读和 Dream 使用 DeepSeek Search 获取检索线索，再用 Fetch 或本地阅读器取得正文核查。独立 Search 和 Fetch 按成功请求计费。 [DeepSeek 计费说明](https://api-docs.deepseek.com/guides/search/#billing)

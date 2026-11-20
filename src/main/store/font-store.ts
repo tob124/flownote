@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join, basename, extname } from 'path'
 import { homedir } from 'os'
 
@@ -54,6 +54,9 @@ export function deleteFont(file: string): void {
 }
 
 export function getFontPath(file: string): string | null {
-  const target = join(FONT_DIR, file)
-  return existsSync(target) && statSync(target).isFile() ? target : null
+  if (typeof file !== 'string' || /[\\/:\0]/.test(file) || !ALLOWED_EXTS.includes(extname(file))) return null
+  try {
+    const target = join(FONT_DIR, file)
+    return !lstatSync(FONT_DIR).isSymbolicLink() && lstatSync(target).isFile() ? target : null
+  } catch { return null }
 }

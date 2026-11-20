@@ -2,6 +2,7 @@ import type { AiJob, Owner, Feedback, InsightView, DreamReport } from '../shared
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Note, NotePatch, NotePatchResult, AppConfig, DreamMeta, NotificationItem, NoteFile, BulkNoteAction, BulkNoteTarget, BulkNoteResult } from '../shared/types'
 import type { WikiSearchResult } from '../shared/wiki-search'
+import type { AttachmentPreviewData } from '../shared/attachment-preview'
 
 const api = {
   thinking: {
@@ -107,14 +108,12 @@ const api = {
   },
   files: {
     canChooseApplication: process.platform === 'win32',
-    readWebClip: (noteId: string, storedName: string): Promise<string> => ipcRenderer.invoke('files:read-web-clip', noteId, storedName),
+    preview: (noteId: string, storedName: string): Promise<AttachmentPreviewData> => ipcRenderer.invoke('files:preview', noteId, storedName),
     select: (): Promise<NoteFile[]> => ipcRenderer.invoke('files:select'),
     check: (storedNames: string[]): Promise<Record<string, boolean>> =>
       ipcRenderer.invoke('files:check', storedNames),
     open: (noteId: string, storedName: string, action: boolean | 'choose' = false): Promise<{ok:boolean;error?:string;cancelled?:boolean;pickerClosed?:boolean}> =>
       ipcRenderer.invoke('files:open', noteId, storedName, action),
-    path: (storedName: string): Promise<string | null> =>
-      ipcRenderer.invoke('files:get-path', storedName),
     attach: (noteId: string, files: NoteFile[]): Promise<boolean> =>
       ipcRenderer.invoke('notes:attach', noteId, files)
   },

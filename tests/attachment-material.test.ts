@@ -7,8 +7,42 @@ import { noteOrganizationText, notePrimaryText } from '../src/shared/note-materi
 import { attachmentPath, saveFiles, saveWebClip } from '../src/main/store/file-store'
 import { applyAiPatch, hashNoteInput, loadNote, patchNote, saveNote } from '../src/main/store/note-store'
 import { summarizeSelectedFile } from '../src/main/services/attachment-summary'
+import { readAttachmentPreview, serveAttachmentMedia } from '../src/main/services/attachment-preview'
+import { attachmentMediaUrl } from '../src/shared/attachment-preview'
 
+const library = vi.hoisted(() => ({ dir: '' }))
+vi.mock('../src/main/store/config-store', () => ({ loadConfig: () => ({ sync_dir: library.dir }) }))
 vi.mock('../src/main/services/pdf-reader', () => ({ readPdf: vi.fn(async () => 'PDF 的文字层中包含了可在本机提取的完整描述。') }))
+
+it('reads attached text and serves only note-owned media with byte-range support', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'flownote-preview-'))
+  library.dir = dir
+  try {
+    const page = join(dir, '素材.html')
+    const audio = join(dir, '课件.mp3')
+    writeFileSync(page, '<article>代码按原文查看</article>')
+    writeFileSync(audio, '0123456789')
+    const [html, mp3] = saveFiles(dir, [page, audio])
+    const id = saveNote(dir, '', 'Inbox', [], 'done', undefined, [html, mp3])
+    const other = saveNote(dir, '另一条笔记')
+
+    expect(await readAttachmentPreview(id, html.storedName)).toEqual({
+      kind: 'text', text: '<article>代码按原文查看</article>', truncated: false
+    })
+    expect(await readAttachmentPreview(other, html.storedName)).toMatchObject({ kind: 'unavailable' })
+    const request = new Request(attachmentMediaUrl(id, mp3.storedName), { headers: { Range: 'bytes=2-4' } })
+    const range = await serveAttachmentMedia(id, mp3.storedName, request)
+    expect(range.status).toBe(206)
+    expect(range.headers.get('Content-Range')).toBe('bytes 2-4/10')
+    expect(range.headers.get('Content-Type')).toBe('audio/mpeg')
+    expect(await range.text()).toBe('234')
+    expect((await serveAttachmentMedia(other, mp3.storedName, request)).status).toBe(404)
+    expect((await serveAttachmentMedia(id, html.storedName, request)).status).toBe(404)
+  } finally {
+    library.dir = ''
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 it('stores webpage body and source in Markdown while the note stores only attachment metadata', () => {
   const dir = mkdtempSync(join(tmpdir(), 'flownote-clip-material-'))

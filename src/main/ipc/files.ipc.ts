@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { saveFiles, checkFiles, attachmentPath } from '../store/file-store'
 import { loadNote, patchNote, validateAttachments, getSyncDir } from '../store/note-store'
-import { readFile, stat } from 'fs/promises'
+import { readAttachmentPreview } from '../services/attachment-preview'
 import { summarizeSelectedFile } from '../services/attachment-summary'
 import { openWithWindows } from '../services/windows-open-with'
 import { IPC_CHANNELS } from '../../shared/types'
@@ -23,14 +23,7 @@ export function registerFilesIpc(): void {
     return files
   })
 
-  ipcMain.handle('files:read-web-clip', async (_e, noteId: string, storedName: string): Promise<string> => {
-    const dir = getSyncDir()
-    const file = loadNote(noteId, dir)?.attachments?.find(item => item.storedName === storedName)
-    const path = file?.sourceUrl && file.ext === 'md' ? attachmentPath(dir, storedName) : null
-    if (!path) throw new Error('网页附件缺失或不属于这条笔记')
-    if ((await stat(path)).size > 2_100_000) throw new Error('附件过大，请使用默认应用打开')
-    return readFile(path, 'utf8')
-  })
+  ipcMain.handle('files:preview', (_e, noteId: string, storedName: string) => readAttachmentPreview(noteId, storedName))
 
   ipcMain.handle(
     IPC_CHANNELS.FILES_CHECK,
@@ -66,17 +59,6 @@ export function registerFilesIpc(): void {
       return error ? {ok:false,error:'系统无法打开附件。' + suggestion + ' ' + error} : {ok:true}
     } catch (error) { return {ok:false,error:'打开附件失败：'+String(error)} }
   })
-
-  ipcMain.handle(
-    IPC_CHANNELS.FILES_GET_PATH,
-    (_e, storedName: string): string | null => {
-      const syncDir = getSyncDir()
-      if (!syncDir) return null
-      const path = attachmentPath(syncDir, storedName)
-      // 使用自定义协议返回同源 URL，避免 file:// 跨源被拦截导致图片无法显示
-      return path ? `flownote-file://${encodeURIComponent(path)}` : null
-    }
-  )
 
   ipcMain.handle(
     IPC_CHANNELS.NOTE_ATTACH,

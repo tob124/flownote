@@ -135,7 +135,6 @@ export const IPC_CHANNELS = {
   FILES_SELECT: 'files:select',
   FILES_CHECK: 'files:check',
   FILES_OPEN: 'files:open',
-  FILES_GET_PATH: 'files:get-path',
   NOTE_ATTACH: 'notes:attach',
   NOTIFICATIONS_LOAD: 'notifications:load',
   NOTIFICATIONS_SAVE: 'notifications:save',

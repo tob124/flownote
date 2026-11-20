@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { ActionMenu, Button } from './ui/Controls'
 import type { Note, NoteFile } from '../../shared/types'
 import AttachmentSummaryEditor from './AttachmentSummaryEditor'
-import WebClipPreview from './WebClipPreview'
+import AttachmentPreview from './AttachmentPreview'
+import { attachmentMediaUrl, mediaFormat } from '../../shared/attachment-preview'
 
-const PREVIEW_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
 const MAX_PREVIEW = 10
 
 interface Props {
@@ -34,7 +34,6 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
     } catch (error) { onNotify(String(error)) }
   }
   const [missing, setMissing] = useState<Set<string>>(new Set())
-  const [imgUrls, setImgUrls] = useState<Record<string, string | null>>({})
   const [loadingMissing, setLoadingMissing] = useState(true)
 
   // 存在性检查（兜底）
@@ -64,30 +63,8 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.id, attachments.map((a) => a.storedName).join('|')])
 
-  // 图片路径分批加载（chunk），避免一次性渲染大量 <img>
-  useEffect(() => {
-    const imgs = attachments
-      .filter((a) => PREVIEW_EXTS.includes(a.ext) && !missing.has(a.storedName))
-      .slice(0, MAX_PREVIEW)
-    if (imgs.length === 0) return
-    let cancelled = false
-    let i = 0
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const loadNext = (): void => {
-      if (cancelled || i >= imgs.length) return
-      const cur = imgs[i].storedName
-      window.api.files.path(cur).then((p) => {
-        if (!cancelled) setImgUrls((m) => ({ ...m, [cur]: p }))
-      })
-      i++
-      timer = setTimeout(loadNext, 60)
-    }
-    loadNext()
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-    }
-  }, [attachments, missing])
+  const thumbnails = new Set(attachments.filter(file => mediaFormat(file.ext)?.kind === 'image' && !missing.has(file.storedName))
+    .slice(0, MAX_PREVIEW).map(file => file.storedName))
 
   async function saveAttachments(attachments: NoteFile[], success: string): Promise<boolean> {
     try {
@@ -118,14 +95,14 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
 
   return <div className="attachment-list">
     {attachments.map(a => <div key={a.storedName} className={'attachment-item' + (a.summary || editingSummary===a.storedName ? ' attachment-with-summary' : '')}>
-      <div className="attachment-info"><button className="attachment-open" onClick={()=>a.sourceUrl&&!missing.has(a.storedName) ? setPreviewFile(a) : void open(a.storedName)} title={a.sourceUrl ? '阅读网页剪藏' : '使用默认应用打开 '+a.name}>
-        {imgUrls[a.storedName] && !missing.has(a.storedName) && <img src={imgUrls[a.storedName]!} alt=""/>}
+      <div className="attachment-info"><button className="attachment-open" onClick={() => setPreviewFile(a)} title={'预览 ' + a.name}>
+        {thumbnails.has(a.storedName) && <img src={attachmentMediaUrl(note.id, a.storedName)} alt="" loading="lazy"/>}
         <span>{a.name} · {fmtSize(a.size)}{missing.has(a.storedName)?' · 文件缺失':''}</span>
       </button>
       {a.summary && <p className="attachment-summary">{a.summary}</p>}</div>
       <ActionMenu label={'附件操作：'+a.name} items={[
         {label:a.summary?'编辑摘要':'添加摘要',onSelect:()=>setEditingSummary(a.storedName)},
-        ...(a.sourceUrl?[{label:'使用默认应用打开',onSelect:()=>void open(a.storedName)}]:[]),
+        {label:'用系统应用打开',onSelect:()=>void open(a.storedName)},
         ...(window.api.files.canChooseApplication ? [{label:'选择打开方式…',onSelect:()=>void open(a.storedName,'choose')}] : []),
         {label:'在文件夹中显示',onSelect:()=>void open(a.storedName,true)},
         ...(missing.has(a.storedName)?[{label:'补齐文件',onSelect:()=>void replaceMissing(a.storedName)}]:[]),
@@ -136,6 +113,6 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
       })()} />}
       {pendingDelete===a.storedName && <div role="group" aria-label="移除附件确认">从笔记中移除此附件？<Button variant="danger" onClick={()=>{removeAttachment(a.storedName);setPendingDelete(null)}}>确认移除</Button><Button onClick={()=>setPendingDelete(null)}>取消</Button></div>}
     </div>)}
-    {previewFile && <WebClipPreview key={`${note.id}:${previewFile.storedName}`} noteId={note.id} file={previewFile} onClose={()=>setPreviewFile(null)}/>}
+    {previewFile && <AttachmentPreview key={`${note.id}:${previewFile.storedName}`} noteId={note.id} file={previewFile} onClose={()=>setPreviewFile(null)}/>}
   </div>
 }

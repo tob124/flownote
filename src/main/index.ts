@@ -1,6 +1,6 @@
 import { startThinkingService, stopThinkingService } from './services/thinking-service'
 import { app, BrowserWindow, dialog, shell, protocol, net } from 'electron'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { loadConfig } from './store/config-store'
@@ -11,6 +11,8 @@ import { inboxWatcher } from './services/inbox-watcher'
 import { setClassifierInstance } from './ipc/classifier.ipc'
 import { setNotificationWindow } from './store/notifications-store'
 import { registerAllIpc } from './ipc'
+import { serveAttachmentMedia } from './services/attachment-preview'
+import { getFontPath } from './store/font-store'
 
 let mainWindow: BrowserWindow | null = null
 let classifierService: ClassifierService | null = null
@@ -24,19 +26,36 @@ if (process.env.FLOWNOTE_CONFIG_PATH) app.setPath('userData', join(process.env.F
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'flownote-file',
-    privileges: { secure: true, supportFetchAPI: true, stream: true }
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true }
   }
 ])
 
-// 绑定附件文件读取：flownote-file://<encodeURIComponent(绝对路径)>
 function registerFileProtocol(): void {
-  protocol.handle('flownote-file', (request) => {
+  protocol.handle('flownote-file', async request => {
     try {
-      const filePath = decodeURIComponent(new URL(request.url).host)
-      return net.fetch(pathToFileURL(filePath).toString())
+      const url = new URL(request.url)
+      const parts = url.pathname.slice(1).split('/').map(decodeURIComponent)
+      if (url.host === 'attachment' && parts.length === 2) return await serveAttachmentMedia(parts[0], parts[1], request)
+      let asset: string | null = null
+      if (url.host === 'font' && parts.length === 1) asset = getFontPath(parts[0])
+      if (url.host === 'pdf-data' && parts.length === 2) {
+        const [directory, file] = parts
+        const pattern = directory === 'cmaps' ? /^[\w-]+\.bcmap$/ : directory === 'standard_fonts' ? /^[\w-]+\.(ttf|pfb)$/ : null
+        if (pattern?.test(file)) {
+          const root = dirname(require.resolve('pdfjs-dist/package.json'))
+          asset = join(root, directory, file)
+        }
+      }
+      if (asset) {
+        const source = await net.fetch(pathToFileURL(asset).href)
+        const headers = new Headers(source.headers)
+        headers.set('Access-Control-Allow-Origin', '*')
+        return new Response(source.body, { status: source.status, headers })
+      }
     } catch {
-      return new Response(null, { status: 404 })
+      // Files can disappear or become temporarily inaccessible during sync.
     }
+    return new Response(null, { status: 404 })
   })
 }
 
