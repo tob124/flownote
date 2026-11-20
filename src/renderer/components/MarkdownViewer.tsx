@@ -7,6 +7,7 @@ import '../styles/markdown.css'
 
 interface Props {
   content: string | null
+  showImages?: boolean
   diffLines?: Set<string> | null
   highlightDiff?: boolean
   /** 真实渲染后测量得到的标题（与 DOM 中每个标题的 id 完全一致），供侧栏大纲与 minimap 共用 */
@@ -25,6 +26,7 @@ function extractText(node: ReactNode): string {
 
 export default function MarkdownViewer({
   content,
+  showImages = true,
   diffLines,
   highlightDiff,
   onHeadings
@@ -82,6 +84,7 @@ export default function MarkdownViewer({
   // 标题（h1-h6）用默认渲染，id 由上方 useLayoutEffect 直接写到 DOM；
   // 这里只重写段落与引用以支持 diff 高亮。
   const components: Components = {
+    ...(!showImages ? { img: ({ alt }: { alt?: string }) => alt ? <span>{alt}</span> : null } : {}),
     p: ({ node: _node, children, className, ...props }) => (
       <p
         {...props}

@@ -149,10 +149,9 @@ export default function ThoughtPanel({owner,compact=false,noteLabel='这条笔�
       {kind==='note' && !!view?.insight && <div className="thought-feedback">
         <ActionMenu label="回应反馈" items={[
           {label:'有帮助',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'helpful'))},
-          {label:'没帮助',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'unhelpful'))},
-          {label:'少对这类内容评论',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'less'))}
-        ]}>{view.insight.feedback ? ({helpful:'已标记有帮助',unhelpful:'已标记没帮助',less:'已偏好减少同类评论'} as Record<string,string>)[view.insight.feedback] || '已记录反馈' : '评价这条回应'}</ActionMenu>
-        <details><summary>反馈有什么作用？</summary><p>“有帮助／没帮助”只在当前资料库记录评价，不训练模型，也不自动修改笔记或 Wiki。“少对这类内容评论”会将最近最多 8 条同类例子作为后续评论的偏好参考，仍可能收到评论；这些例子会随后续 AI 请求发送给 DeepSeek。</p></details>
+          {label:'没帮助',disabled:busy,onSelect:()=>void act(()=>window.api.thinking.feedback({kind,id},'unhelpful'))}
+        ]}>{view.insight.feedback==='helpful'?'已标记有帮助':view.insight.feedback==='unhelpful'?'已标记没帮助':'评价这条回应'}</ActionMenu>
+        <details><summary>反馈有什么作用？</summary><p>“有帮助／没帮助”只在当前资料库记录评价。</p></details>
       </div>}
       {!!value?.sources.length && !value.recommendations.length && <Sources items={value.sources}/>}
       </>}

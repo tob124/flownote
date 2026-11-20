@@ -18,8 +18,8 @@ const api = {
     exportLegacy: ():Promise<boolean> => ipcRenderer.invoke('thinking:legacy-export')
   },
   notes: {
-    clipWeb: (url: string): Promise<string> => ipcRenderer.invoke('notes:clip-web', url),
-    createRecord: (content:string):Promise<Note> => ipcRenderer.invoke('notes:create-record',content),
+    clipWeb: (url: string): Promise<NoteFile> => ipcRenderer.invoke('notes:clip-web', url),
+    createRecord: (content: string, attachments?: NoteFile[]): Promise<Note> => ipcRenderer.invoke('notes:create-record', content, attachments),
     loadAll: (): Promise<Note[]> => ipcRenderer.invoke('notes:load-all'),
     search: (keyword: string): Promise<Note[]> => ipcRenderer.invoke('notes:search', keyword),
     create: (content: string): Promise<string> => ipcRenderer.invoke('notes:create', content),
@@ -104,6 +104,7 @@ const api = {
       ipcRenderer.invoke('fonts:get-path', file)
   },
   files: {
+    readWebClip: (noteId: string, storedName: string): Promise<string> => ipcRenderer.invoke('files:read-web-clip', noteId, storedName),
     select: (): Promise<NoteFile[]> => ipcRenderer.invoke('files:select'),
     check: (storedNames: string[]): Promise<Record<string, boolean>> =>
       ipcRenderer.invoke('files:check', storedNames),

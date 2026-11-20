@@ -1,5 +1,5 @@
 export type Owner = { kind: 'note' | 'dream'; id: string }
-export type Feedback = 'helpful' | 'unhelpful' | 'less' | 'read' | 'irrelevant'
+export type Feedback = 'helpful' | 'unhelpful' | 'read' | 'irrelevant'
 export interface Usage { input: number; output: number; searches: number }
 export interface SourceEvidence {
   id: string; url: string; title: string; fetched_at: number
@@ -21,7 +21,8 @@ export interface Recommendation {
 }
 export interface NoteInsight {
   schema_version: 1; id: string; owner: Owner; input_hash: string; created_at: number
-  body: string; skipped: boolean; feedback?: Feedback; recommendations: Recommendation[]
+  // Older saved remarks can still contain the retired 'less' feedback.
+  body: string; skipped: boolean; feedback?: Feedback | 'less'; recommendations: Recommendation[]
   sources: SourceEvidence[]; warning?: string; usage: Usage
 }
 export interface DreamReport {

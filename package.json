@@ -1,6 +1,6 @@
 {
   "name": "flownote",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "FlowNote - Personal Knowledge Management Tool",
   "author": "FlowNote",
   "main": "./out/main/index.js",

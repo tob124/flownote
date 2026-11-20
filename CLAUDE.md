@@ -16,7 +16,7 @@ npm run dev
 
 Dependencies: Node.js 18+, npm. All deps declared in package.json — use `npm install`.
 
-**⚠️ 动手前必读 `TROUBLESHOOTING.md`（踩坑手册）**——记录了本机环境的关键坑：npm 镜像（npmmirror，清华源无 electron 包）、allow-scripts 批准、git ssh 依赖绕过、winCodeSign 符号链接权限问题（exe 图标）、DeepSeek 端点勿改（/chat 仍有效，迁移的是模型名）等。`todo.txt` 为任务清单（已全部完成，含每项决策说明）。当前版本 v2.6.0。
+环境与打包问题可查 [踩坑手册](TROUBLESHOOTING.md)。早期任务记在 [20260806 任务归档](docs/history/todo.txt)，当前工作由 [GitHub Issues](https://github.com/tob124/flownote/issues) 跟踪。
 
 ## Architecture (4-layer modular — mirrors Python v1.8)
 

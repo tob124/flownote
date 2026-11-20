@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ActionMenu, Button } from './ui/Controls'
 import type { Note, NoteFile } from '../../shared/types'
+import AttachmentSummaryEditor from './AttachmentSummaryEditor'
+import WebClipPreview from './WebClipPreview'
 
 const PREVIEW_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
 const MAX_PREVIEW = 10
@@ -21,6 +23,8 @@ function fmtSize(bytes: number): string {
 export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: Props): JSX.Element | null {
   const attachments = note.attachments || []
   const [pendingDelete,setPendingDelete]=useState<string | null>(null)
+  const [editingSummary, setEditingSummary] = useState<string | null>(null)
+  const [previewFile, setPreviewFile] = useState<NoteFile | null>(null)
   async function open(storedName:string,reveal=false):Promise<void>{
     try{const result=await window.api.files.open(note.id,storedName,reveal);if(!result.ok)onNotify(result.error || '打开失败')}catch(error){onNotify(String(error))}
   }
@@ -80,14 +84,15 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
     }
   }, [attachments, missing])
 
-  async function saveAttachments(attachments: NoteFile[], success: string): Promise<void> {
+  async function saveAttachments(attachments: NoteFile[], success: string): Promise<boolean> {
     try {
       const result = await window.api.notes.patch(note.id, note.revision ?? 0, { attachments })
-      if (!result.ok) { onNotify(result.error.message); onRefresh?.(); return }
+      if (!result.ok) { onNotify(result.error.message); onRefresh?.(); return false }
       onSaved?.(result.value)
       onRefresh?.()
       onNotify(success)
-    } catch (error) { onNotify(`附件更新失败：${String(error)}`) }
+      return true
+    } catch (error) { onNotify(`附件更新失败：${String(error)}`); return false }
   }
 
   function removeAttachment(storedName: string): void {
@@ -107,17 +112,24 @@ export default function AttachmentList({ note, onRefresh, onSaved, onNotify }: P
   if (attachments.length === 0) return null
 
   return <div className="attachment-list">
-    {attachments.map(a => <div key={a.storedName} className="attachment-item">
-      <button className="attachment-open" onClick={()=>void open(a.storedName)} title={'使用默认应用打开 '+a.name}>
+    {attachments.map(a => <div key={a.storedName} className={'attachment-item' + (a.summary || editingSummary===a.storedName ? ' attachment-with-summary' : '')}>
+      <div className="attachment-info"><button className="attachment-open" onClick={()=>a.sourceUrl&&!missing.has(a.storedName) ? setPreviewFile(a) : void open(a.storedName)} title={a.sourceUrl ? '阅读网页剪藏' : '使用默认应用打开 '+a.name}>
         {imgUrls[a.storedName] && !missing.has(a.storedName) && <img src={imgUrls[a.storedName]!} alt=""/>}
         <span>{a.name} · {fmtSize(a.size)}{missing.has(a.storedName)?' · 文件缺失':''}</span>
       </button>
+      {a.summary && <p className="attachment-summary">{a.summary}</p>}</div>
       <ActionMenu label={'附件操作：'+a.name} items={[
+        {label:a.summary?'编辑摘要':'添加摘要',onSelect:()=>setEditingSummary(a.storedName)},
+        ...(a.sourceUrl?[{label:'使用默认应用打开',onSelect:()=>void open(a.storedName)}]:[]),
         {label:'在文件夹中显示',onSelect:()=>void open(a.storedName,true)},
         ...(missing.has(a.storedName)?[{label:'补齐文件',onSelect:()=>void replaceMissing(a.storedName)}]:[]),
         {label:'移除附件',danger:true,separator:true,onSelect:()=>setPendingDelete(a.storedName)}
       ]}/>
+      {editingSummary===a.storedName && <AttachmentSummaryEditor name={a.name} summary={a.summary} onClose={()=>setEditingSummary(null)} onSave={summary=>void (async()=>{
+        if (await saveAttachments(attachments.map(file=>file.storedName===a.storedName?{...file,summary}:file), '附件摘要已保存')) setEditingSummary(null)
+      })()} />}
       {pendingDelete===a.storedName && <div role="group" aria-label="移除附件确认">从笔记中移除此附件？<Button variant="danger" onClick={()=>{removeAttachment(a.storedName);setPendingDelete(null)}}>确认移除</Button><Button onClick={()=>setPendingDelete(null)}>取消</Button></div>}
     </div>)}
+    {previewFile && <WebClipPreview key={`${note.id}:${previewFile.storedName}`} noteId={note.id} file={previewFile} onClose={()=>setPreviewFile(null)}/>}
   </div>
 }

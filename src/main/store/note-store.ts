@@ -1,12 +1,18 @@
 import { newestFirst } from '../../shared/note-time'
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, renameSync } from 'fs'
+import { readdir, readFile } from 'fs/promises'
 import { createHash } from 'crypto'
 import { join } from 'path'
-import type { Note, NotePatch } from '../../shared/types'
+import type { Note, NoteFile, NotePatch } from '../../shared/types'
+import { ATTACHMENT_SUMMARY_LIMIT } from '../../shared/attachment-summary'
+import { noteOrganizationText } from '../../shared/note-material'
 import { loadConfig } from './config-store'
 import { atomicWrite } from './atomic-file'
+import { validAttachmentName } from './file-store'
 
 const NOTE_ID = /^\d{13,}$/
+const NOTE_FILE = /^\d{13,}\.json$/
+const READ_BATCH_SIZE = 16
 const lastAllocatedByDir = new Map<string, number>()
 
 export function getSyncDir(): string {
@@ -46,13 +52,23 @@ export function hashNoteInput(content: string): string {
   return createHash('sha256').update(content.replace(/\r\n?/g, '\n')).digest('hex')
 }
 
+export function validateAttachments(files: unknown): asserts files is NoteFile[] {
+  if (!Array.isArray(files) || files.some(file => !file || !validAttachmentName(file.storedName) ||
+    typeof file.name !== 'string' || typeof file.ext !== 'string' || !Number.isSafeInteger(file.size) || file.size < 0 ||
+    (file.summary !== undefined && (typeof file.summary !== 'string' || file.summary.length > ATTACHMENT_SUMMARY_LIMIT)) ||
+    (file.sourceUrl !== undefined && (typeof file.sourceUrl !== 'string' || file.sourceUrl.length > 8192 || !/^https?:\/\//i.test(file.sourceUrl))))) {
+    throw new Error('附件列表或摘要无效')
+  }
+}
+
 export function saveNote(
   syncDir: string,
   content: string,
   category = 'Inbox',
   tags: string[] = [],
   aiStatus: Note['ai_status'] = 'pending',
-  captureId?: string
+  captureId?: string,
+  attachments: NoteFile[] = []
 ): string {
   const notesDir = join(syncDir, 'notes')
   mkdirSync(notesDir, { recursive: true })
@@ -73,7 +89,8 @@ export function saveNote(
       title: '',
       summary: '',
       category,
-      tags
+      tags,
+      ...(attachments.length ? { attachments } : {})
     }
     try {
       atomicWrite(join(notesDir, `${id}.json`), JSON.stringify(note, null, 2), {
@@ -87,10 +104,43 @@ export function saveNote(
   throw new Error('Could not allocate a unique Note ID')
 }
 
-export function loadAllNotes(): Note[] {
+export function loadAllNotes(): Promise<Note[]> {
   const syncDir = getSyncDir()
   if (!syncDir) throw new Error('sync_dir not configured')
-  return loadAllNotesFrom(syncDir)
+  return loadNotesInBatches(syncDir)
+}
+
+function decodeNote(raw: string): Note | null {
+  const note = JSON.parse(raw.replace(/^\uFEFF/, ''))
+  return typeof note?.id === 'string' && typeof note.raw_content === 'string' && typeof note.created_at === 'string' ? note : null
+}
+
+/** Background scans yield between small batches so sync-folder reads cannot block Electron IPC. */
+export async function loadNotesInBatches(syncDir: string): Promise<Note[]> {
+  const notesDir = join(syncDir, 'notes')
+  async function list(directory: string): Promise<string[]> {
+    try { return await readdir(directory) }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
+    }
+  }
+  try {
+    const [names, deleted] = await Promise.all([list(notesDir), list(join(syncDir, 'trash', 'deleted'))])
+    const tombstones = new Set(deleted)
+    const files = names.filter(file => NOTE_FILE.test(file) && !tombstones.has(file))
+    const notes: Note[] = []
+    for (let offset = 0; offset < files.length; offset += READ_BATCH_SIZE) {
+      const batch = await Promise.all(files.slice(offset, offset + READ_BATCH_SIZE).map(async file => {
+        try { return decodeNote(await readFile(join(notesDir, file), 'utf8')) }
+        catch { return null }
+      }))
+      for (const note of batch) if (note) notes.push(note)
+    }
+    return notes.sort(newestFirst)
+  } catch (error) {
+    throw new Error(`无法读取笔记目录：${String(error)}`)
+  }
 }
 
 export function loadAllNotesFrom(syncDir: string): Note[] {
@@ -99,12 +149,11 @@ export function loadAllNotesFrom(syncDir: string): Note[] {
   const notes: Note[] = []
   try {
     for (const file of readdirSync(notesDir)) {
-      if (!/^\d{13,}\.json$/.test(file)) continue
+      if (!NOTE_FILE.test(file)) continue
       if (existsSync(join(syncDir, 'trash', 'deleted', file))) continue
       try {
-        const raw = readFileSync(join(notesDir, file), 'utf-8')
-        const note = JSON.parse(raw.replace(/^\uFEFF/, ''))
-        if (typeof note.id === 'string' && typeof note.raw_content === 'string' && typeof note.created_at === 'string') notes.push(note)
+        const note = decodeNote(readFileSync(join(notesDir, file), 'utf-8'))
+        if (note) notes.push(note)
       } catch {
         // A partially synced or damaged file must not hide other notes.
       }
@@ -170,11 +219,12 @@ export function patchNote(
     next.favorite = patch.favorite
   }
   if (patch.attachments !== undefined) {
-    if (!Array.isArray(patch.attachments) || patch.attachments.some((file) =>
-      !file || typeof file.storedName !== 'string' || /[\\/]/.test(file.storedName) || file.storedName.includes('..'))) {
-      throw new Error('附件列表无效')
-    }
+    validateAttachments(patch.attachments)
     next.attachments = patch.attachments
+    if (!noteOrganizationText(current).trim() && noteOrganizationText(next).trim()) {
+      next.ai_status = 'pending'
+      next.retry_count = 0
+    }
   }
   next.manual_fields = [...manual]
   next.revision = expectedRevision + 1
@@ -206,7 +256,7 @@ export function applyAiPatch(
   const current = loadNote(id, syncDir)
   if (!current) return 'missing'
   const filePath = join(syncDir, 'notes', `${id}.json`)
-  if (hashNoteInput(current.raw_content) !== expectedInputHash) {
+  if (hashNoteInput(noteOrganizationText(current)) !== expectedInputHash) {
     if (current.ai_status === 'processing') {
       atomicWrite(filePath, JSON.stringify({
         ...current, ai_status: 'pending', retry_count: 0,

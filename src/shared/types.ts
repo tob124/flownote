@@ -3,6 +3,8 @@ export interface NoteFile {
   storedName: string
   ext: string
   size: number
+  summary?: string
+  sourceUrl?: string
 }
 
 export interface Note {

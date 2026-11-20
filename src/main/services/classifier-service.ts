@@ -1,6 +1,7 @@
 import { newestFirst } from '../../shared/note-time'
+import { noteDisplayTitle, noteOrganizationText } from '../../shared/note-material'
 import { BrowserWindow } from 'electron'
-import { applyAiPatch, getSyncDir, hashNoteInput, loadAllNotesFrom, loadNote } from '../store/note-store'
+import { applyAiPatch, getSyncDir, hashNoteInput, loadNotesInBatches, loadNote } from '../store/note-store'
 import { loadConfig } from '../store/config-store'
 import { callLlm } from '../llm/llm-client'
 import { CLASSIFY_PROMPT } from '../llm/prompts'
@@ -57,16 +58,19 @@ export class ClassifierService {
   }
 
   private async processQueue(): Promise<void> {
+    this._poke = false
     try {
-      const config = loadConfig()
-      const syncDir = config.sync_dir
-      if (!syncDir || !config.api_key) return
+      const initial = loadConfig()
+      const syncDir = initial.sync_dir
+      if (!syncDir || !initial.api_key) return
 
-      const allNotes = loadAllNotesFrom(syncDir)
+      const allNotes = await loadNotesInBatches(syncDir)
+      const config = loadConfig()
+      if (config.sync_dir !== syncDir || !config.api_key) return
       let recovered = 0
       for (const note of allNotes) {
         if (note.ai_status !== 'processing') continue
-        const state = applyAiPatch(syncDir, note.id, hashNoteInput(note.raw_content), {
+        const state = applyAiPatch(syncDir, note.id, hashNoteInput(noteOrganizationText(note)), {
           ai_status: 'pending'
         })
         if (state === 'applied') {
@@ -84,14 +88,14 @@ export class ClassifierService {
         .sort((a, b) => newestFirst(b,a))
         .slice(0, 3)
 
-      if (pending.length === 0) { this._poke = false; return }
-      this._poke = false
+      if (pending.length === 0) return
 
-      const inputs = new Map<string, string>()
+      const inputs = new Map<string, { text: string; hash: string }>()
       for (const note of pending) {
-        const inputHash = hashNoteInput(note.raw_content)
+        const text = noteOrganizationText(note)
+        const inputHash = hashNoteInput(text)
         if (applyAiPatch(syncDir, note.id, inputHash, { ai_status: 'processing' }) === 'applied') {
-          inputs.set(note.id, inputHash)
+          inputs.set(note.id, { text, hash: inputHash })
         }
       }
       this.notifyUpdate()
@@ -102,14 +106,20 @@ export class ClassifierService {
       )
 
       for (const note of pending) {
-        const inputHash = inputs.get(note.id)
-        if (!inputHash) continue
+        const input = inputs.get(note.id)
+        if (!input) continue
+        const inputHash = input.hash
         try {
+          if (!input.text.trim()) {
+            applyAiPatch(syncDir, note.id, inputHash, { ai_status: 'done', retry_count: 0 })
+            this.notifyUpdate()
+            continue
+          }
           const result = await callLlm(
             config.api_provider,
             config.api_key,
             prompt,
-            note.raw_content,
+            input.text,
             { isJson: true }
           )
           if (!result) {
@@ -180,7 +190,7 @@ export class ClassifierService {
     if (attempts >= 3) {
       pushNotification({
         type: 'AI 预处理',
-        message: `笔记「${latest.title || latest.raw_content.slice(0, 12)}…」重试 3 次后仍失败，请检查 API 配置`
+        message: `笔记「${noteDisplayTitle(latest).slice(0, 48)}」重试 3 次后仍失败，请检查 API 配置`
       })
     }
   }

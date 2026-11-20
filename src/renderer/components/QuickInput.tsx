@@ -1,10 +1,11 @@
 import {ActionMenu,Button,Icon} from './ui/Controls'
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { NoteFile } from '../../shared/types'
 import { useNotes } from '../context/NotesContext'
 import { useConfig } from '../context/ConfigContext'
 import '../styles/quickinput.css'
 import { useDraftGuard } from '../utils/useDraftGuard'
+import AttachmentSummaryEditor from './AttachmentSummaryEditor'
 
 // 轻量语音输入：浏览器原生 Web Speech API（非神经网络）
 type SpeechRecognitionCtor = new () => SpeechRecognitionConfig
@@ -36,18 +37,31 @@ interface SpeechRecognitionResultLike {
   isFinal: boolean
 }
 
+const DRAFT_IDLE_MS = 650
+
+function loadCaptureDraft(key: string): { text: string; files: NoteFile[] } {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || 'null')
+    return { text: typeof value?.text === 'string' ? value.text : '', files: Array.isArray(value?.files) ? value.files : [] }
+  } catch { return { text: '', files: [] } }
+}
+
 export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean;onSaved?:(id:string,warning?:string)=>void}): JSX.Element {
   const { config } = useConfig()
   const draftKey='flownote:capture:v1:'+config.sync_dir
-  const initial=useRef<{text:string;files:NoteFile[]}>((()=>{try{return JSON.parse(localStorage.getItem(draftKey)||'{"text":"","files":[]}')}catch{return {text:'',files:[]}}})()).current
-  const [text, setText] = useState(typeof initial.text==='string'?initial.text:'')
+  const [initial] = useState(() => loadCaptureDraft(draftKey))
+  const persistedDraft = useRef(initial)
+  const [text, setText] = useState(initial.text)
+  const [composing, setComposing] = useState(false)
   const [sending, setSending] = useState(false)
   const [listening, setListening] = useState(false)
   const [polishing, setPolishing] = useState(false)
   const [polishStatus, setPolishStatus] = useState('')
   useEffect(()=>{if(polishing || !polishStatus)return;const timer=setTimeout(()=>setPolishStatus(''),3500);return()=>clearTimeout(timer)},[polishing,polishStatus])
   const [error, setError] = useState<string | null>(null)
-  const [pendingFiles, setPendingFiles] = useState<NoteFile[]>(Array.isArray(initial.files)?initial.files:[])
+  const [pendingFiles, setPendingFiles] = useState(initial.files)
+  const [editingSummary, setEditingSummary] = useState<string | null>(null)
+  const summaryFile = pendingFiles.find(file => file.storedName === editingSummary)
   const [attaching, setAttaching] = useState(false)
   const { addNote, savedId, revealNote } = useNotes()
   const recognitionRef = useRef<SpeechRecognitionConfig | null>(null)
@@ -64,18 +78,35 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   const alive=useRef(true)
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;recognitionRef.current?.stop()}},[])
   useEffect(() => { if (clipOpen) clipInput.current?.focus() }, [clipOpen])
-  function saveDraft(): boolean {
-    try { localStorage.setItem(draftKey,JSON.stringify({text,files:pendingFiles}));return true }
-    catch { setError('本机草稿无法保存，请先保存笔记再离开');return false }
-  }
+  const latestDraft = useRef(initial)
+  latestDraft.current = { text, files: pendingFiles }
+  const saveDraft = useCallback((showError = true): boolean => {
+    const draft = latestDraft.current
+    if (persistedDraft.current.text === draft.text && persistedDraft.current.files === draft.files) return true
+    try {
+      if (draft.text || draft.files.length) localStorage.setItem(draftKey, JSON.stringify(draft))
+      else localStorage.removeItem(draftKey)
+      persistedDraft.current = draft
+      return true
+    } catch {
+      if (showError) setError('本机草稿无法保存，请先保存笔记再离开')
+      return false
+    }
+  }, [draftKey])
   useDraftGuard(() => {
+    if (summaryFile) { setError('请先保存或取消附件摘要编辑'); return false }
     if (sending || attaching || polishing || listening || clipping) {
       setError('请等待当前操作完成后再离开')
       return false
     }
     return saveDraft()
   })
-  useEffect(() => { if (!sending) saveDraft() }, [text, pendingFiles])
+  useEffect(() => {
+    if (sending || composing) return
+    const timer = setTimeout(saveDraft, DRAFT_IDLE_MS)
+    return () => clearTimeout(timer)
+  }, [saveDraft, text, pendingFiles, sending, composing])
+  useEffect(() => () => { saveDraft(false) }, [saveDraft])
 
   async function clipPage(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
@@ -87,10 +118,10 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
     try {
       const clip = await window.api.notes.clipWeb(clipUrl.trim())
       if (!alive.current) return
-      setText(previous => previous ? `${previous}\n\n${clip}` : clip)
+      setPendingFiles(previous => [...previous, clip])
       setClipUrl('')
       setClipOpen(false)
-      setClipStatus('网页已加入草稿，可编辑后保存。')
+      setClipStatus('网页已作为 Markdown 附件加入草稿。')
       textInput.current?.focus()
     } catch (reason) {
       if (alive.current) {
@@ -104,32 +135,25 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
 
   async function saveNote(): Promise<void> {
     const trimmed = text.trim()
-    if (!trimmed || sending || polishing || clipping) return
+    if ((!trimmed && !pendingFiles.length) || summaryFile || sending || polishing || clipping || attaching) return
     if (trimmed.length > 1_000_000) {
       setError('笔记超过 100 万字符，请缩短后保存')
       return
     }
     setSending(true)
     setError(null)
-    const id = await addNote(trimmed)
+    const id = await addNote(trimmed, pendingFiles)
     if (!alive.current) return
-    let warning: string | undefined
     if (id) {
-      // 保存成功后再把待附加的文件挂到该笔记上
-      if (pendingFiles.length) {
-        try {
-          if (!await window.api.files.attach(id, pendingFiles)) throw new Error('未能挂载附件')
-        } catch {
-          warning='笔记已保存，但附件挂载失败，请重新添加附件'; setError(warning)
-        }
-      }
-      try { localStorage.removeItem(draftKey) } catch { /* save succeeded */ }
+      const empty = { text: '', files: [] }
+      latestDraft.current = empty
+      try { localStorage.removeItem(draftKey); persistedDraft.current = empty } catch { /* save succeeded */ }
       setText('')
-      setPendingFiles([])
+      setPendingFiles(empty.files)
       setClipStatus('')
     }
     setSending(false)
-    if(id && alive.current) onSaved?.(id,warning)
+    if (id) onSaved?.(id)
   }
 
   async function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): Promise<void> {
@@ -241,22 +265,33 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
   }
 
   const speechSupported = getSpeechRecognition() !== null
-  const polishEnabled = deepseekConfigured && text.trim().length > 0
+  const hasText = /\S/.test(text)
+  const polishEnabled = deepseekConfigured && hasText
 
   return (
     <div className={'quick-input-container'+(expanded&&!workspace?' expanded':'')}>
       <label className="composer-label" htmlFor="quick-note">{workspace?'新建笔记':'写下一条记录'}</label>
       <textarea ref={textInput} id="quick-note" className={'quick-input'+(expanded&&!workspace?' expanded':'')}
         placeholder="此刻有什么值得记下来？" value={text} onChange={e=>setText(e.target.value)}
+        onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}
         onKeyDown={e=>void handleKeyDown(e)} disabled={sending||polishing} aria-busy={polishing} rows={3}/>
       {pendingFiles.length>0 && <div className="quick-input-pending">
-        {pendingFiles.map((f,i)=><span className="quick-input-file-chip" key={f.storedName+i}><Icon name="clip"/>{f.name}
-          <button aria-label={'移除附件 '+f.name} onClick={()=>setPendingFiles(prev=>prev.filter((_,idx)=>idx!==i))}>×</button>
+        {pendingFiles.map(f=><span className="quick-input-file-chip" key={f.storedName}><Icon name="clip"/><span title={f.name}>{f.name}</span>
+          <button type="button" disabled={sending} aria-label={'编辑附件摘要 '+f.name} onClick={()=>setEditingSummary(f.storedName)}>{f.summary?'摘要':'添加摘要'}</button>
+          <button type="button" disabled={sending} aria-label={'移除附件 '+f.name} onClick={()=>{
+            setPendingFiles(prev=>prev.filter(file=>file.storedName!==f.storedName))
+            if (editingSummary===f.storedName) setEditingSummary(null)
+          }}>×</button>
         </span>)}
       </div>}
+      {summaryFile && <AttachmentSummaryEditor key={summaryFile.storedName} name={summaryFile.name} summary={summaryFile.summary}
+        onClose={()=>{setEditingSummary(null);setError(null)}} onSave={summary=>{
+          setPendingFiles(previous=>previous.map(file=>file.storedName===summaryFile.storedName ? {...file,summary} : file))
+          setEditingSummary(null);setError(null)
+        }} />}
       <div className="quick-input-toolbar">
         <div className="quick-input-actions">
-          <Button variant="quiet" icon="clip" onClick={()=>void handleAttach()} disabled={attaching}>添加附件</Button>
+          <Button variant="quiet" icon="clip" onClick={()=>void handleAttach()} disabled={attaching||sending}>{attaching?'正在添加…':'添加附件'}</Button>
           <ActionMenu label="输入工具" items={[
             ...(!workspace?[{label:expanded?'收起编辑区':'展开编辑区',icon:'expand' as const,onSelect:()=>setExpanded(v=>!v)}]:[]),
             {label:'剪藏网页',icon:'link',onSelect:()=>{setClipOpen(true);clipInput.current?.focus()}},
@@ -267,7 +302,7 @@ export default function QuickInput({workspace=false,onSaved}:{workspace?:boolean
         </div>
         <div className="composer-save">
           <span className="quick-input-hint">{text.length?text.length+' 字 · ':''}Alt + Enter</span>
-          <Button variant="primary" onClick={()=>void saveNote()} disabled={!text.trim()||sending||polishing||clipping}>{sending?'正在保存…':'保存笔记'}</Button>
+          <Button variant="primary" onClick={()=>void saveNote()} disabled={(!hasText&&!pendingFiles.length)||!!summaryFile||sending||polishing||clipping||attaching}>{sending?'正在保存…':'保存笔记'}</Button>
         </div>
       </div>
       {clipOpen && <form className="web-clip" onSubmit={event => void clipPage(event)}>

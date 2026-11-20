@@ -1,6 +1,6 @@
 # FlowNote 3.0.2
 
-3.0.2 加入 Wiki 搜索和网页剪藏，更新说明见 [更新日志](更新日志汇总20260922.md)。Windows 检查通过后自动编译并发布安装包。[下载最新版](https://github.com/tob124/flownote/releases/latest)
+3.0.3 改善新建笔记时的输入响应，网页剪藏保存为 Markdown 附件，整理流程使用附件摘要。Windows 检查通过后自动编译并发布安装包。[下载最新版](https://github.com/tob124/flownote/releases/latest)
 
 上一版的 AI、笔记交互修复和反馈按钮说明见 [3.0.1 修复说明](docs/RELEASE-3.0.1.md)。
 
@@ -9,6 +9,14 @@
 个人知识管理工具 — "冥想盆" (Pensieve)。快速捕获灵感笔记，AI 自动分类/打标签，每月 AI 生成精选 Wiki 页面，支持"Dream"知识整合洞察。
 
 基于 React + Electron + TypeScript 构建。
+
+## 项目维护
+
+用 Issue 记录可独立验收的缺陷、功能和研究任务。每条写明现状、预期和验收条件。用 `later` 标记暂未排期的事项，用 `awaiting-release` 标记实现已验证、等待安装包的改动。确认纳入某版本后再设置里程碑。[查看待办](https://github.com/tob124/flownote/issues)
+
+普通开发任务在 PR 中用 `Closes #编号` 关联。需要等安装包验收的任务，在代码改动中引用 Issue，并在发布后补上版本链接和验收结果再关闭。[查看发布记录](https://github.com/tob124/flownote/releases)
+
+早期更新日志、任务记录和调研计划见[历史归档](docs/history/README.md)。
 
 ## 环境要求
 
@@ -247,5 +255,6 @@ src/
 搜索支持 `#标签 + 关键词`，如 `#自行车 换轮胎`；多个标签与关键词需同时满足。筛选面板保留日期、分类、收藏等条件，不再枚举全部标签。
 
 - **Wiki 搜索**：打开 Wiki 后点「搜索 Wiki」或按 Ctrl+F。默认在当前正文高亮并逐处跳转，切换到「所有 Wiki」可查活跃 Wiki 和封存快照。所有 Wiki 显示按文件分组的 Markdown 摘录。
-- **网页剪藏**：在「新建笔记 → 输入工具 → 剪藏网页」填写公开网页链接。FlowNote 会用设置中的 DeepSeek 密钥取得标题和 Markdown 正文，连同来源链接追加到草稿。检查、编辑后再保存。
+- **网页剪藏**：在「新建笔记 → 输入工具 → 剪藏网页」填写公开链接。DeepSeek Fetch 取得的正文和来源链接保存为 Markdown 附件，点击可在应用内阅读。可以只保存附件，也可以附上自己的笔记。
+- **附件摘要**：通过附件的摘要入口补写或编辑摘要。网页、UTF-8 文本和有文字层的 PDF 会尝试在本地生成简短摘录。分类、Wiki、Dream 和 AI 思考只读取摘要，留空时跳过该附件。旧式剪藏正文保留在原笔记，能识别旧版来源标记时，整理流程会从剪藏段落提取摘要。
 - **联网研究**：延伸阅读和 Dream 使用 DeepSeek Search 获取检索线索，再用 Fetch 或本地阅读器取得正文核查。独立 Search 和 Fetch 按成功请求计费。 [DeepSeek 计费说明](https://api-docs.deepseek.com/guides/search/#billing)

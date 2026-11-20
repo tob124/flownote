@@ -13,9 +13,9 @@ vi.mock('../src/main/services/deepseek-search',async(importOriginal)=>({...await
 vi.mock('../src/main/services/source-reader',()=>({readPublicPage:env.page}))
 import { GenerationError } from '../src/main/llm/thinking-client'
 import { saveNote, loadNote, patchNote, hashNoteInput } from '../src/main/store/note-store'
-import { enqueue, tickThinking, getInsightView, decideCorrection, initializeThinking, jobAction } from '../src/main/services/thinking-service'
+import { enqueue, tickThinking, getInsightView, decideCorrection, initializeThinking, jobAction, saveFeedback } from '../src/main/services/thinking-service'
 import { aiRead, aiWrite, jobs, reports, readThinkingState } from '../src/main/store/insight-store'
-import type { WikiCorrection } from '../src/shared/insights'
+import type { Feedback, NoteInsight, WikiCorrection } from '../src/shared/insights'
 const usage={input:10,output:20,searches:0}
 const answer=(value:unknown)=>({text:JSON.stringify(value),usage})
 beforeEach(()=>{
@@ -51,6 +51,50 @@ describe('persistent thinking workflow',()=>{
     await tickThinking()
     expect(getInsightView({kind:'note',id}).thread.messages.map(m=>m.role)).toEqual(['user','assistant'])
     expect(loadNote(id,env.dir)?.raw_content).toBe('普通的日常观点')
+  })
+  it('shares only attachment summaries across note commentary, replies and Dream', async () => {
+    const dir = env.dir
+    mkdirSync(join(dir, 'files'))
+    const file = { name: '资料.md', storedName: 'material.md', ext: 'md', size: 22, summary: '外部材料简述' }
+    writeFileSync(join(dir, 'files', file.storedName), 'ATTACHMENT_BODY_SENTINEL')
+    const id = saveNote(dir, '', '学习', [], 'done', undefined, [file])
+    const owner = { kind: 'note' as const, id }
+    env.generate.mockResolvedValue(answer({ body: '补充说明', queries: [], recommendations: [], fact_check: { claim: file.summary, query: '禁止把附件当成用户观点' } }))
+    for (const kind of ['comment', 'reply'] as const) {
+      env.generate.mockClear()
+      enqueue(owner, kind, kind === 'reply' ? '可以进一步解释吗？' : undefined)
+      await tickThinking()
+      expect(env.generate.mock.calls.some(call => call[2].includes(file.summary))).toBe(true)
+      expect(env.generate.mock.calls.every(call => !call[2].includes('ATTACHMENT_BODY_SENTINEL'))).toBe(true)
+    }
+    env.generate.mockClear()
+    enqueue({ kind: 'dream', id: 'attachment-dream' }, 'dream')
+    await tickThinking()
+    expect(reports(dir)[0].notes.some(note => note.id === id)).toBe(true)
+    expect(env.generate.mock.calls.some(call => call[1].includes('Dream 像睡眠') && call[2].includes(file.summary))).toBe(true)
+    expect(env.generate.mock.calls.every(call => !call[2].includes('ATTACHMENT_BODY_SENTINEL'))).toBe(true)
+    expect(env.search).not.toHaveBeenCalled()
+  })
+  it('does not send old notes marked with the retired feedback option in new comments', async () => {
+    const oldText = '旧版少评例子，不能出现在新评论请求中。'
+    const oldId = saveNote(env.dir, oldText)
+    const oldOwner = { kind: 'note' as const, id: oldId }
+    aiWrite(env.dir, 'insights', `note_${oldId}`, {
+      schema_version: 1, id: 'old-comment', owner: oldOwner, input_hash: hashNoteInput(oldText),
+      created_at: 1, body: '旧回应', skipped: false, feedback: 'less', recommendations: [], sources: [], usage
+    } satisfies NoteInsight)
+    expect(() => saveFeedback(oldOwner, 'less' as Feedback)).toThrow('无效反馈')
+    const owner = { kind: 'note' as const, id: saveNote(env.dir, '这次要评论的新笔记。') }
+    enqueue(owner, 'comment')
+    await tickThinking()
+    expect(env.generate).toHaveBeenCalledTimes(1)
+    const input = env.generate.mock.calls[0][2]
+    expect(input).toContain('这次要评论的新笔记。')
+    expect(input).not.toContain(oldText)
+    expect(input).not.toContain('less_comments_like')
+    saveFeedback(owner, 'helpful')
+    expect(getInsightView(owner).insight?.feedback).toBe('helpful')
+    expect(env.generate).toHaveBeenCalledTimes(1)
   })
   it('rejects a result if the note was edited during generation',async()=>{
     const id=saveNote(env.dir,'旧判断')

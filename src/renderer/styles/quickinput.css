@@ -123,6 +123,9 @@
   line-height: 1;
 }
 
+.quick-input-file-chip > span { overflow: hidden; text-overflow: ellipsis; }
+.quick-input-file-chip > :is(svg, button) { flex: none; }
+
 .quick-input-file-chip button:hover {
   color: var(--danger);
 }

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import type { Note } from '../../shared/types'
+import type { Note, NoteFile } from '../../shared/types'
 import { EMPTY_NOTE_FILTERS, filterNotes, searchNotes, type NoteFilters } from '../../shared/note-filters'
 import { newestFirst } from '../../shared/note-time'
 import { useConfig } from './ConfigContext'
@@ -8,7 +8,7 @@ interface NotesCtx {
   setFilters:(filters:NoteFilters)=>void; clearFilters:()=>void
   isLoading:boolean; isRefreshing:boolean; error:string|null
   setSearchKeyword:(kw:string)=>void; loadNotes:()=>Promise<void>
-  addNote:(content:string)=>Promise<string|null>; deleteNote:(id:string)=>Promise<boolean>
+  addNote:(content:string, attachments?: NoteFile[])=>Promise<string|null>; deleteNote:(id:string)=>Promise<boolean>
   savedId:string|null; focusId:string|null; focusRequest:number; revealNote:(id:string)=>void
 }
 const NotesContext=createContext<NotesCtx>({
@@ -52,18 +52,41 @@ export function NotesProvider({children}:{children:ReactNode}):JSX.Element {
   },[loadNotes])
   useEffect(()=>{
     let timer:ReturnType<typeof setTimeout>|undefined
-    const reload=():void=>{if(timer)clearTimeout(timer);timer=setTimeout(()=>void loadNotes(),150)}
+    let lastEditorInput = -Infinity
+    const reload = (): void => {
+      if (timer !== undefined) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = undefined
+        void loadNotes()
+      }, Math.max(150, lastEditorInput + 650 - performance.now()))
+    }
+    const onEditorInput = (event: Event): void => {
+      if (!(event.target instanceof HTMLTextAreaElement)) return
+      lastEditorInput = performance.now()
+      if (timer !== undefined) reload()
+    }
     const unsubs=[window.api.on('notes:updated',reload),
       window.api.inboxEvents.onNoteCreated(reload),window.api.inboxEvents.onProcessingEnd(reload)]
-    const focus=():void=>{void loadNotes()}
+    const focus = (): void => {
+      if (timer !== undefined) clearTimeout(timer)
+      timer = undefined
+      void loadNotes()
+    }
+    window.addEventListener('input', onEditorInput, true)
     window.addEventListener('focus',focus)
-    return()=>{if(timer)clearTimeout(timer);unsubs.forEach(fn=>fn());window.removeEventListener('focus',focus);++sequence.current}
+    return () => {
+      if (timer !== undefined) clearTimeout(timer)
+      unsubs.forEach(fn => fn())
+      window.removeEventListener('input', onEditorInput, true)
+      window.removeEventListener('focus', focus)
+      ++sequence.current
+    }
   },[loadNotes])
   const persistedDir=useRef(dir)
   useEffect(()=>{if(persistedDir.current!==dir){persistedDir.current=dir;return}try{localStorage.setItem('flownote:query:'+dir,JSON.stringify({query:searchKeyword,filters}))}catch{}},[dir,searchKeyword,filters])
-  const addNote=useCallback(async(content:string):Promise<string|null>=>{
+  const addNote=useCallback(async(content:string, attachments?: NoteFile[]):Promise<string|null>=>{
     try{
-      const note=await window.api.notes.createRecord(content)
+      const note=await window.api.notes.createRecord(content, attachments)
       if(dirRef.current===dir){
         // Invalidate older reads so they cannot erase this just-saved record.
         ++sequence.current

@@ -1,7 +1,8 @@
 import { ipcMain } from 'electron'
-import { loadNote, loadAllNotes, saveNote, updateNote, patchNote, NoteConflictError, searchNotes, deleteNote, listTrashedNotes, restoreNote, deleteNoteForever } from '../store/note-store'
+import { getSyncDir, loadNote, loadAllNotes, saveNote, updateNote, patchNote, validateAttachments, NoteConflictError, searchNotes, deleteNote, listTrashedNotes, restoreNote, deleteNoteForever } from '../store/note-store'
 import { loadConfig } from '../store/config-store'
 import { fetchWebClip } from '../services/deepseek-fetch'
+import { attachmentPath, saveWebClip } from '../store/file-store'
 import { IPC_CHANNELS } from '../../shared/types'
 import type { Note, NotePatch, NotePatchResult } from '../../shared/types'
 
@@ -16,15 +17,24 @@ export function registerNotesIpc(): void {
     if (clipping) throw new Error('已有一项网页剪藏正在进行')
     clipping = true
     try {
-      return await fetchWebClip(config.api_key.trim(), url)
+      const clip = await fetchWebClip(config.api_key.trim(), url)
+      if (getSyncDir() !== config.sync_dir) throw new Error('同步目录已切换，请重新剪藏')
+      return saveWebClip(config.sync_dir, clip)
     } finally {
       clipping = false
     }
   })
-  ipcMain.handle('notes:create-record', (_e, content: string) => {
-    const dir = loadConfig().sync_dir
-    if (!dir || typeof content !== 'string' || !content.trim() || content.length > 1000000) throw new Error('笔记内容或目录无效')
-    const id = saveNote(dir,content)
+  ipcMain.handle('notes:create-record', (_e, content: string, attachments: unknown = []) => {
+    const dir = getSyncDir()
+    validateAttachments(attachments)
+    if (!dir || typeof content !== 'string' || content.length > 1000000 || (!content.trim() && !attachments.length)) {
+      throw new Error('请填写正文或添加附件')
+    }
+    if (attachments.some(file => !attachmentPath(dir, file.storedName))) {
+      throw new Error('有附件文件缺失，请重新添加或移除后再保存')
+    }
+    const hasMaterial = Boolean(content.trim()) || attachments.some(file => file.summary?.trim())
+    const id = saveNote(dir, content, 'Inbox', [], hasMaterial ? 'pending' : 'done', undefined, attachments)
     return loadNote(id,dir)!
   })
   ipcMain.handle(IPC_CHANNELS.NOTES_LOAD_ALL, () => loadAllNotes())

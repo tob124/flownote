@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNotes } from '../context/NotesContext'
 import { useConfig } from '../context/ConfigContext'
 import { noteDate } from '../../shared/note-time'
+import { noteDisplayTitle } from '../../shared/note-material'
 import { mayLeave, readWorkspace, writeWorkspace, type WorkspaceState } from '../utils/workspace'
 import SearchBar from './SearchBar'
 import QuickInput from './QuickInput'
@@ -42,8 +43,12 @@ function Workspace({ dir, onTrash }: { dir: string; onTrash: () => void }): JSX.
   const queryKey = JSON.stringify([searchKeyword, filters])
   const previousQuery = useRef(queryKey)
   const snapshotReady = useRef(false)
-  const currentIds = filteredNotes.map(n => n.id)
-  const hasUpdates = snapshot.join('|') !== currentIds.join('|')
+  const currentIds = useMemo(() => filteredNotes.map(n => n.id), [filteredNotes])
+  const notesById = useMemo(() => new Map(notes.map(note => [note.id, note])), [notes])
+  const hasUpdates = useMemo(
+    () => snapshot.length !== currentIds.length || snapshot.some((id, index) => id !== currentIds[index]),
+    [snapshot, currentIds]
+  )
   const pageCount = Math.max(1, Math.ceil(snapshot.length / 30))
   function changePage(value: number): void {
     const next = Math.max(1, Math.min(pageCount, value))
@@ -90,7 +95,7 @@ function Workspace({ dir, onTrash }: { dir: string; onTrash: () => void }): JSX.
   const reader = useRef<HTMLDivElement>(null)
   const aiTrigger = useRef<HTMLButtonElement>(null)
   const lastFocus = useRef<string | null>(null)
-  const note = notes.find(n => n.id === selected)
+  const note = selected ? notesById.get(selected) : undefined
   const update = (patch: Partial<WorkspaceState>): void => { setPrefs(() => { const next = { ...prefsRef.current, ...patch }; prefsRef.current=next;writeWorkspace(dir, next); return next }) }
   const navigate = (action: () => void): void => { if (mayLeave()) { setConfirmDelete(false); action() } }
   function select(id: string): void { navigate(() => { setSelected(id); setCreating(false); setBrowse(false); update({ selected: id }); if (windowWidth < 1100) setAi(false) }) }
@@ -152,8 +157,8 @@ function Workspace({ dir, onTrash }: { dir: string; onTrash: () => void }): JSX.
       <div className="workspace-note-list" ref={listScroll} onScroll={e => recordScroll({ listScroll: e.currentTarget.scrollTop })} aria-label="笔记列表">
         {isLoading && !notes.length && <p className="workspace-empty">正在读取笔记…</p>}
         {!isLoading && !filteredNotes.length && <p className="workspace-empty">没有符合当前条件的笔记</p>}
-        {snapshot.slice((page-1)*30, page*30).map(id => { const n=notes.find(item=>item.id===id); return !n ? <div key={id} className="workspace-note" aria-disabled="true">已移除</div> : <button key={n.id} id={'note-' + n.id} className="workspace-note" data-located={highlight===n.id} aria-current={n.id === selected && !creating ? 'true' : undefined} onClick={() => select(n.id)}>
-          <strong>{n.title || n.raw_content.slice(0, 60) || '无标题笔记'}</strong><p>{n.raw_content}</p>
+        {snapshot.slice((page-1)*30, page*30).map(id => { const n=notesById.get(id); return !n ? <div key={id} className="workspace-note" aria-disabled="true">已移除</div> : <button key={n.id} id={'note-' + n.id} className="workspace-note" data-located={highlight===n.id} aria-current={n.id === selected && !creating ? 'true' : undefined} onClick={() => select(n.id)}>
+          <strong>{noteDisplayTitle(n)}</strong><p>{n.raw_content || n.attachments?.find(file => file.summary)?.summary}</p>
           <span>{noteDate(n)}{n.favorite ? ' · 已收藏' : ''}{n.ai_status === 'failed' ? ' · 整理失败' : n.ai_status === 'processing' ? ' · 整理中' : n.ai_status === 'pending' ? ' · 等待整理' : ''}</span>
         </button>})}
       </div>

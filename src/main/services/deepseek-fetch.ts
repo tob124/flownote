@@ -2,7 +2,6 @@ import { sourceUrl } from './source-reader'
 import { limited } from '../llm/request-limit'
 
 const MAX_RESPONSE_BYTES = 2_000_000
-const MAX_CLIP_LENGTH = 100_000
 
 function publicWebUrl(rawUrl: unknown): URL {
   try {
@@ -79,7 +78,7 @@ export async function fetchDeepseekPage(key: string, rawUrl: string, signal: Abo
   return page.content
 }
 
-export async function fetchWebClip(key: string, rawUrl: unknown): Promise<string> {
+export async function fetchWebClip(key: string, rawUrl: unknown): Promise<{ title: string; sourceUrl: string; markdown: string; content: string }> {
   const url = publicWebUrl(rawUrl)
   const source = url.href
   url.hash = ''
@@ -88,9 +87,7 @@ export async function fetchWebClip(key: string, rawUrl: unknown): Promise<string
   const title = page.title.replace(/\s+/g, ' ').trim().slice(0, 200)
   const heading = title || url.hostname
   const prefix = `## ${heading.replace(/[\\`*_[\]<>#~&]/g, '\\$&')}\n\n[来源网页](<${source}>)\n\n`
-  if (content.length <= MAX_CLIP_LENGTH) return prefix + content
-  const excerpt = content.slice(0, MAX_CLIP_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
-  return `${prefix}${excerpt}\n\n（网页较长，剪藏内容已截断。）`
+  return { title: heading, sourceUrl: source, markdown: prefix + content, content }
 }
 
 class ClipError extends Error {}

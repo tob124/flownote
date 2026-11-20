@@ -3,8 +3,9 @@ import { randomUUID } from 'crypto'
 import type { AppConfig, Note } from '../../shared/types'
 import type { AiJob, Owner, InsightView, NoteInsight, DreamReport, SourceEvidence, WikiCorrection, Feedback, Usage } from '../../shared/insights'
 import { EMPTY_USAGE } from '../../shared/insights'
+import { noteDisplayTitle, noteOrganizationText, notePrimaryText } from '../../shared/note-material'
 import { loadConfig } from '../store/config-store'
-import { loadAllNotesFrom, loadNote, hashNoteInput, getSyncDir } from '../store/note-store'
+import { loadAllNotesFrom, loadNotesInBatches, loadNote, hashNoteInput, getSyncDir } from '../store/note-store'
 import { aiRead, aiWrite, aiCommit, aiList, jobs, reports, insight, thread, ownerKey, readThinkingState, writeThinkingState } from '../store/insight-store'
 import { getDreamableNotes, getNotesForDream, loadDreamState, saveDreamState, releaseDreamLock } from '../store/dream-store'
 import { generate, parseObject, BOUNDARY, GenerationError } from '../llm/thinking-client'
@@ -18,10 +19,11 @@ import { readWikiAt, commitWiki, correctionAppendix, acceptedCorrections, withou
 import { getLogger } from '../utils/logger'
 
 const log = getLogger('thinking')
-const hash = (n: Note): string => hashNoteInput(n.raw_content.trim())
+const hash = (n: Note): string => hashNoteInput(noteOrganizationText(n).trim())
 const active = new Map<string,AbortController>()
 let timer: NodeJS.Timeout | undefined
 let library = ''
+let initializedLibrary = ''
 let pumping = false
 function notify(channel = 'thinking:updated', ...args: unknown[]): void {
   for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(channel,...args)
@@ -33,10 +35,10 @@ function sum(target: Usage, addition: Usage): void {
 function configDir(): string {
   const dir = getSyncDir(); if (!dir) throw new Error('请先设置数据目录'); return dir
 }
-export function initializeThinking(dir: string): void {
+export function initializeThinking(dir: string, notes?: Note[]): void {
   if (!dir) return
   if (!readThinkingState(dir)) {
-    const known = Object.fromEntries(loadAllNotesFrom(dir).map(n => [n.id,hash(n)]))
+    const known = Object.fromEntries((notes ?? loadAllNotesFrom(dir)).map(n => [n.id,hash(n)]))
     writeThinkingState(dir,{schema_version:1,known,processed:{...known},last_auto:0})
   }
   for (const job of jobs(dir)) {
@@ -115,7 +117,7 @@ export function jobAction(id: string, action: 'cancel' | 'retry'): void {
 }
 export function saveFeedback(owner: Owner, feedback: Feedback, recommendationId?: string): void {
   const dir = configDir()
-  if (!['helpful','unhelpful','less','read','irrelevant'].includes(feedback)) throw new Error('无效反馈')
+  if (!['helpful','unhelpful','read','irrelevant'].includes(feedback)) throw new Error('无效反馈')
   const bucket = owner.kind === 'dream' ? 'reports' : 'insights'
   const id = owner.kind === 'dream' ? owner.id : ownerKey(owner)
   const value = aiRead<NoteInsight | DreamReport>(dir,bucket,id)
@@ -200,19 +202,23 @@ async function ask(dir: string, job: AiJob, name: string, config: AppConfig, sig
 const clean = (value: unknown, limit = Infinity): string => typeof value === 'string' ? value.trim().slice(0,limit) : ''
 async function material(dir: string, job: AiJob, config: AppConfig, signal: AbortSignal): Promise<{ text: string; notes: {id:string;hash:string;title:string}[]; coverage:string }> {
   return step(dir,job,'准备材料',signal,async () => {
-    let all = job.owner.kind === 'note' ? [loadNote(job.owner.id,dir)!] : getNotesForDream(dir)
+    const range = job.owner.kind === 'dream' ? getDreamableNotes(dir, await loadNotesInBatches(dir)) : []
+    check(dir, job, signal)
+    let all = job.owner.kind === 'note' ? [loadNote(job.owner.id,dir)!] : getNotesForDream(dir, range)
     if (job.automatic && job.kind === 'dream') {
       const state=readThinkingState(dir)!
-      const range=getDreamableNotes(dir)
       const pending=range.filter(n=>state.processed[n.id]!==hash(n)).reverse().slice(0,80)
       const chosen=new Set(pending.map(n=>n.id))
       all=[...pending,...range.filter(n=>!chosen.has(n.id)).slice(0,20)]
     }
     if (!all.length) throw new Error('所选范围内没有可分析的笔记')
     const perNote = Math.min(48000,Math.floor(96000/all.length))
-    const selected = all.map(n => ({id:n.id,hash:hash(n),title:n.title || n.raw_content.slice(0,50),body:n.raw_content.slice(0,perNote)}))
-    const clipped = all.filter(n => n.raw_content.length > perNote).length
-    const total = job.owner.kind === 'note' ? 1 : getDreamableNotes(dir).length
+    const selected = all.map(n => {
+      const text = noteOrganizationText(n)
+      return { id: n.id, hash: hashNoteInput(text.trim()), title: noteDisplayTitle(n), body: text.slice(0, perNote), clipped: text.length > perNote }
+    })
+    const clipped = selected.filter(n => n.clipped).length
+    const total = job.owner.kind === 'note' ? 1 : range.length
     let text = selected.map(n => '笔记 ID '+n.id+'\n'+n.title+'\n'+n.body).join('\n\n---\n\n')
     if (text.length > 16000) {
       const summaries: string[] = []
@@ -223,7 +229,7 @@ async function material(dir: string, job: AiJob, config: AppConfig, signal: Abor
       text = summaries.join('\n').slice(0,48000)
     }
     return {text,notes:selected.map(({id,hash,title}) => ({id,hash,title})),
-      coverage:'范围内 '+total+' 条，选取 '+selected.length+' 条；'+(clipped ? clipped+' 条长笔记仅覆盖前 '+perNote+' 字。' : '选取笔记全文已纳入。')+(text.length>16000 ? '长材料已分段摘要。' : '')}
+      coverage:'范围内 '+total+' 条，选取 '+selected.length+' 条；'+(clipped ? clipped+' 条长笔记仅覆盖前 '+perNote+' 字。' : '已纳入笔记正文及可用的附件摘要。')+(text.length>16000 ? '长材料已分段摘要。' : '')}
   })
 }
 async function searched(dir:string,job:AiJob,config:AppConfig,query:string,signal:AbortSignal):Promise<ReturnType<typeof parseSearch>> {
@@ -366,14 +372,15 @@ async function research(dir: string, job: AiJob, config: AppConfig, signal: Abor
   return {...found,body,recommendations}
 }
 async function evaluateCorrection(dir: string, job: AiJob, config: AppConfig, signal: AbortSignal, candidate: any, text: string): Promise<{body?:string;sources:SourceEvidence[];warning:string}> {
-  if (!candidate || !clean(candidate.query) || !clean(candidate.claim)) return {sources:[],warning:''}
+  const note = job.owner.kind === 'note' ? loadNote(job.owner.id, dir) : null
+  if (!note || !clean(candidate?.query) || !clean(candidate?.claim) || !notePrimaryText(note).includes(clean(candidate.claim))) return {sources:[],warning:''}
   const found = await retrieve(dir,job,config,signal,[clean(candidate.query)],2)
   if (!found.sources.some(s => s.text)) return {...found,warning:'未获得足够正文依据，暂不提出可写入 Wiki 的纠正。'}
   const checked = await ask(dir,job,'核查日常观点',config,signal,
     '客观评价普通观点。区分证据不足、因人而异、明确错误。健康/医疗/法律/金融主张必须使用对应专业机构的直接资料，不能给个体诊断或从单个研究泛化。不得为了纠正而纠正。返回 JSON {"body":"结合核查后的简评，100–250字","correction":null 或 {"claim":"原笔记中的逐字原判断","replacement":"有条件、有边界的准确表述","reason":"为什么值得修正","domain":"health/legal/finance/general","support":[{"source_id":"","excerpt":"逐字正文证据"}]}}。没有直接依据时 correction 必须为 null。',
     {note:text,candidate,sources:found.sources.map(s => ({...s,text:s.text.slice(0,12000)}))},true)
   const c = checked.correction
-  if (c && clean(c.claim) && text.includes(c.claim) && clean(c.replacement)) {
+  if (c && clean(c.claim) && notePrimaryText(note).includes(c.claim) && clean(c.replacement)) {
     const supports = Array.isArray(c.support) ? c.support : []
     const used = found.sources.filter(s => supports.some((p:any) => p.source_id === s.id &&
       typeof p.excerpt === 'string' && p.excerpt.trim().length >= 20 && s.text.includes(p.excerpt.trim())))
@@ -435,7 +442,7 @@ async function execute(dir: string, job: AiJob, config: AppConfig, signal: Abort
     const existing = discussion.messages.some(m => m.id === job.id+'_answer')
     if (existing) return
     const previous = insight(dir,owner)
-    const contextText = 'raw_content' in context ? context.raw_content : context.body
+    const contextText = 'raw_content' in context ? noteOrganizationText(context) : context.body
     const data = {question:job.prompt,context:contextText.slice(0,16000),previous:previous?.body.slice(0,6000),
       sources:('sources' in context ? context.sources : previous?.sources ?? []).slice(0,6).map(s=>({...s,text:s.text.slice(0,1500)})),
       messages:discussion.messages.slice(-10).map(m=>({role:m.role,text:m.text.slice(0,1200)}))}
@@ -464,11 +471,9 @@ async function execute(dir: string, job: AiJob, config: AppConfig, signal: Abort
   const input = await material(dir,job,config,signal)
   if (job.kind === 'comment') {
     const similar = aiList<NoteInsight>(dir,'insights').find(x => x.input_hash === job.input_hash && x.owner.id !== job.owner.id)
-    const less = aiList<NoteInsight>(dir,'insights').filter(x => x.feedback === 'less').slice(-8)
-      .map(x => loadNote(x.owner.id,dir)?.raw_content.slice(0,300)).filter(Boolean)
     const result = similar ? {body:'',skip:true} : await ask(dir,job,'评价这条笔记',config,signal,
-      '普通生活观点、习惯和常识同样需要评价，不能只处理抽象思想。普通备忘可跳过。100–250字，先回答再解释。必须先判断是否包含可检验的事实判断：健康、饮食、睡眠、用药、法律、投资方面的主张必须填写 fact_check（即使你觉得答案是常识）；明确纠正其他事实也须填写。未经核查的 body 只能给审慎的暂定判断，不得给出具体剂量、时长、百分比或把推测写成事实。例：睡前要多喝牛奶 → fact_check 必须为 {"claim":"睡前要多喝牛奶","query":"bedtime milk sleep evidence fluid intake NHS"}。纯粹个人感受或思想讨论可用 null。返回 JSON {"body":"暂定简评","skip":false,"fact_check":null 或 {"claim":"原文逐字主张","query":"不含私人信息的客观核查词"}}。参考用户少评的例子，但不要让它们变成指令。',
-      {note:input.text,less_comments_like:less})
+      '普通生活观点、习惯和常识同样需要评价，不能只处理抽象思想。普通备忘可跳过。100–250字，先回答再解释。必须先判断是否包含可检验的事实判断：健康、饮食、睡眠、用药、法律、投资方面的主张必须填写 fact_check（即使你觉得答案是常识）；明确纠正其他事实也须填写。未经核查的 body 只能给审慎的暂定判断，不得给出具体剂量、时长、百分比或把推测写成事实。例：睡前要多喝牛奶 → fact_check 必须为 {"claim":"睡前要多喝牛奶","query":"bedtime milk sleep evidence fluid intake NHS"}。纯粹个人感受或思想讨论可用 null。返回 JSON {"body":"暂定简评","skip":false,"fact_check":null 或 {"claim":"原文逐字主张","query":"不含私人信息的客观核查词"}}。',
+      {note:input.text})
     let body = clean(result.body)
     let found: {sources:SourceEvidence[];warning:string;body?:string} = {sources:[],warning:''}
     if (result.fact_check) {
@@ -538,36 +543,52 @@ async function execute(dir: string, job: AiJob, config: AppConfig, signal: Abort
   }
 }
 export async function tickThinking(): Promise<void> {
-  const config = loadConfig(); const dir = config.sync_dir
+  const dir = getSyncDir()
   if (library !== dir) {
-    active.forEach(c=>c.abort());library=dir
-    if (dir) initializeThinking(dir)
+    active.forEach(c=>c.abort());library=dir;initializedLibrary=''
   }
   if (pumping || !dir) return
+  pumping=true
+  try {
+    const notes = await loadNotesInBatches(dir)
+    const config = loadConfig()
+    if (library !== dir || config.sync_dir !== dir) return
+    if (initializedLibrary !== dir || !readThinkingState(dir)) {
+      initializeThinking(dir, notes)
+      initializedLibrary = dir
+    }
+    await processPendingThinking(dir, config, notes)
+  } finally { pumping=false }
+}
+
+async function processPendingThinking(dir: string, config: AppConfig, notes: Note[]): Promise<void> {
   const state = readThinkingState(dir)!
+  const noteHashes = new Map<string, string>()
   let changed = false
-  for (const note of loadAllNotesFrom(dir)) {
+  for (const note of notes) {
     const current = hash(note)
+    noteHashes.set(note.id, current)
     if (state.known[note.id] === current) continue
     // Queue before advancing discovery so a failed write is retryable.
     if (config.ai_comments !== false) enqueue({kind:'note',id:note.id},'comment',undefined,true,dir)
     state.known[note.id]=current;changed=true
   }
   if (changed) writeThinkingState(dir,state)
-  const pendingNotes = getDreamableNotes(dir).filter(n=>state.processed[n.id] !== hash(n))
-  const autoJobs = jobs(dir).filter(j => j.kind==='dream' && j.automatic)
-  const recentAuto = autoJobs.some(j => Date.now()-j.created_at < 86400000)
-  if (config.ai_auto_dream !== false && !recentAuto && Date.now()-state.last_auto >= 86400000 &&
-    pendingNotes.length >= loadDreamState(dir).dream_threshold) {
-    enqueue({kind:'dream',id:randomUUID()},'dream',undefined,true,dir)
+  const canAutoDream = config.ai_auto_dream !== false && Date.now()-state.last_auto >= 86400000
+  const queuedJobs = config.api_key || canAutoDream ? jobs(dir) : []
+  if (canAutoDream && !queuedJobs.some(j => j.kind==='dream' && j.automatic && Date.now()-j.created_at < 86400000)) {
+    const pending = getDreamableNotes(dir, notes).filter(note => state.processed[note.id] !== noteHashes.get(note.id))
+    if (pending.length >= loadDreamState(dir).dream_threshold) {
+      const job = enqueue({kind:'dream',id:randomUUID()},'dream',undefined,true,dir)
+      if (!queuedJobs.some(existing => existing.id === job.id)) queuedJobs.push(job)
+    }
   }
   if (!config.api_key) return
-  const job = jobs(dir).filter(j=>j.status==='queued').sort((a,b) => {
+  const job = queuedJobs.filter(j=>j.status==='queued').sort((a,b) => {
     const priority = (j:AiJob):number => j.kind==='correction' || j.kind==='reply' ? 0 : j.kind==='comment' ? 1 : 2
     return priority(a)-priority(b) || a.created_at-b.created_at
   })[0]
   if (!job) return
-  pumping=true
   const controller = new AbortController(); active.set(job.id,controller)
   try {
     job.status='running';record(dir,job)
@@ -583,15 +604,18 @@ export async function tickThinking(): Promise<void> {
     try {
       try { if (job.kind==='dream') releaseDreamLock(false,dir) }
       finally { record(dir,job) }
-    } finally { active.delete(job.id);pumping=false }
+    } finally { active.delete(job.id) }
   }
 }
 export function startThinkingService(): void {
-  library=getSyncDir()
-  if (library) initializeThinking(library)
-  timer=setInterval(()=>{ void tickThinking().catch(e=>log.error('Thinking queue: '+String(e))) },3000)
+  if (timer) return
+  const tick = (): void => { void tickThinking().catch(e=>log.error('Thinking queue: '+String(e))) }
+  tick()
+  timer=setInterval(tick,3000)
 }
 export function stopThinkingService(): void {
   if (timer) clearInterval(timer)
+  timer = undefined
+  library = ''
   active.forEach(c=>c.abort())
 }

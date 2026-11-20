@@ -35,7 +35,7 @@ it('clips a public page as editable Markdown with its original URL', async () =>
   const fetch = vi.fn().mockResolvedValue(Response.json({ title: '页面标题\n[书摘]', content: '**第一段**\n\n第二段' }))
   vi.stubGlobal('fetch', fetch)
   const clip = await fetchWebClip('test-key', 'https://example.org/a(b)?q=x#part')
-  expect(clip).toBe('## 页面标题 \\[书摘\\]\n\n[来源网页](<https://example.org/a(b)?q=x#part>)\n\n**第一段**\n\n第二段')
+  expect(clip.markdown).toBe('## 页面标题 \\[书摘\\]\n\n[来源网页](<https://example.org/a(b)?q=x#part>)\n\n**第一段**\n\n第二段')
   expect(fetch).toHaveBeenCalledWith('https://api.deepseek.com/v1/tools/fetch', expect.objectContaining({
     method: 'POST', redirect: 'error', headers: expect.objectContaining({ Authorization: 'Bearer test-key' }),
     body: JSON.stringify({ url: 'https://example.org/a(b)?q=x' })

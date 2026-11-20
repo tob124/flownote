@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto'
 import type { DreamMeta, Note } from '../../shared/types'
 import { getSyncDir, loadAllNotesFrom } from './note-store'
 import { newestFirst, noteDate } from '../../shared/note-time'
+import { noteOrganizationText } from '../../shared/note-material'
 import { atomicWrite } from './atomic-file'
 
 const defaults = (): DreamMeta => ({ last_dream_at:null, dream_in_progress:false, dream_threshold:10, dream_time_range:'this_month' })
@@ -37,13 +38,12 @@ export function timeRangeStartDate(range: string, now = new Date()): string {
   else day.setUTCDate(1)
   return day.toISOString().slice(0,10)
 }
-export function getDreamableNotes(syncDir = getSyncDir()): Note[] {
+export function getDreamableNotes(syncDir = getSyncDir(), notes?: Note[]): Note[] {
   if (!syncDir) return []
   const start = timeRangeStartDate(loadDreamState(syncDir).dream_time_range)
-  return loadAllNotesFrom(syncDir).filter(n => n.raw_content.trim() && noteDate(n) >= start).sort(newestFirst)
+  return (notes ?? loadAllNotesFrom(syncDir)).filter(n => noteDate(n) >= start && noteOrganizationText(n).trim()).sort(newestFirst)
 }
-export function getNotesForDream(syncDir = getSyncDir()): Note[] {
-  const all = getDreamableNotes(syncDir)
+export function getNotesForDream(syncDir = getSyncDir(), all = getDreamableNotes(syncDir)): Note[] {
   if (all.length <= 100) return all
   // Uniform sampling across the actual ordered timeline, never a day-of-month week key.
   return Array.from({length:100},(_,i) => all[Math.floor(i*(all.length-1)/99)])

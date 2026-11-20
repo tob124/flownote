@@ -1,7 +1,7 @@
 # FlowNote 踩坑手册（Troubleshooting）
 
 > 给未来 AI 的现场记录：本仓库开发/打包环境中的已知坑、已做决策与核实结论。
-> 整理时间：2026-08-06（v2.6.0 打包完成）。动手前先读本文件 + `todo.txt`（任务清单，含每项完成说明）。
+> 整理于 2026-08-06（v2.6.0）。同一时期的修复决定见 [20260806 任务归档](docs/history/todo.txt)。
 
 ## 1. 环境与网络（npm 安装）
 
@@ -57,7 +57,7 @@
 
 ## 6. 遗留事项（接手时可继续）
 
-- **exe 应用图标**待管理员权限打包（见 §2）——todo.txt 有完整步骤。
+- **exe 应用图标**的早期排查见 §2 和 [20260806 任务归档](docs/history/todo.txt)。当前问题见 [Issue #5](https://github.com/tob124/flownote/issues/5)。
 - **tsc --noEmit 有 6 个改动前就存在的错误**（`dream.ipc.ts` `getOwnerBrowserWindow` 不存在于 WebContents；`llm-client.ts` `data: unknown`×2；`retryOnFailure` 泛型×4）——与本项目功能无关，修 `retryOnFailure` 泛型时注意其签名是 `(...args: unknown[]) => unknown`。
 - **无测试/lint 基础设施**（无 vitest/jest/eslint 配置）——验证靠 `npm run build` + dev 模式手测。
 - **stale `processing.txt` 恢复**：崩溃残留的 processing.txt 不会被回收（rename 失败即返回），可做启动恢复，属优化项。

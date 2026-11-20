@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkLineBreaks from '../utils/remark-line-breaks'
 import type { Note, NotePatch } from '../../shared/types'
+import { noteDisplayTitle } from '../../shared/note-material'
 import { useConfig } from '../context/ConfigContext'
 import { clearNoteDraft, freshNoteDraft, loadNoteDraft, saveNoteDraft } from '../utils/note-draft'
 import AttachmentList from './AttachmentList'
@@ -112,14 +113,26 @@ export default function NoteEditor({ note, onRefresh, scrollTop=0, onScroll }: P
   return (
 <div className="note-editor" ref={scrollRef} onScroll={e=>onScroll?.(e.currentTarget.scrollTop)}>
         <div className="note-detail-head">
-          <h1 className="note-detail-title">{viewNote.title || '无标题笔记'}</h1>
+          <h1 className="note-detail-title">{noteDisplayTitle(viewNote)}</h1>
         </div>
         <div className="note-detail-meta">{viewNote.created_at}<span className={`note-card-status ${viewNote.ai_status}`}>
           {viewNote.ai_status === 'done' ? '' : viewNote.ai_status === 'processing' ? '处理中' : viewNote.ai_status === 'failed' ? '整理失败' : '等待整理'}
         </span></div>
         <div className="note-detail-toolbar">
           <Button onClick={() => {if(flush()){if(!editing)setDraft(loadNoteDraft(localStorage,library,note)??freshNoteDraft(viewNote));setEditing(!editing)}}}>{editing ? '阅读' : '编辑笔记'}</Button>
-          <Button variant="quiet" icon="clip" disabled={attaching} onClick={()=>void (async()=>{setAttaching(true);try{const files=await window.api.files.select();if(!alive.current||!files.length)return;await window.api.files.attach(note.id,files);if(alive.current){onRefresh?.();notify('附件已添加')}}catch(e){if(alive.current)notify(String(e))}finally{if(alive.current)setAttaching(false)}})()}>添加附件</Button>
+          <Button variant="quiet" icon="clip" disabled={attaching} onClick={()=>void (async()=>{
+            setAttaching(true)
+            try {
+              const files = await window.api.files.select()
+              if (!alive.current || !files.length) return
+              if (!await window.api.files.attach(note.id, files)) throw new Error('附件未能保存，请重新添加')
+              if (alive.current) { onRefresh?.(); notify('附件已添加') }
+            } catch (error) {
+              if (alive.current) notify(String(error))
+            } finally {
+              if (alive.current) setAttaching(false)
+            }
+          })()}>{attaching ? '正在添加…' : '添加附件'}</Button>
           {editing && <><Button variant="quiet" onClick={discardDraft}>丢弃草稿</Button><span>Ctrl+S 保存</span></>}
         </div>
         {editing ? (

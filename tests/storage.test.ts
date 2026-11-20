@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { atomicWrite } from '../src/main/store/atomic-file'
-import { applyAiPatch, deleteNote, deleteNoteForever, hashNoteInput, listTrashedNotes, loadAllNotesFrom, loadNote, patchNote, restoreNote, saveNote, searchNotes } from '../src/main/store/note-store'
+import { applyAiPatch, deleteNote, deleteNoteForever, hashNoteInput, listTrashedNotes, loadAllNotesFrom, loadNote, loadNotesInBatches, patchNote, restoreNote, saveNote, searchNotes } from '../src/main/store/note-store'
 import { readEffectiveTime } from '../src/main/store/note-time'
 import type { Note } from '../src/shared/types'
 
@@ -141,5 +141,24 @@ describe('note storage', () => {
     expect(readEffectiveTime(old)).toBe(1_699_999_999_999)
     expect(readEffectiveTime({ ...old, created_at_ms: 12345 })).toBe(12345)
     expect(hashNoteInput('one\r\ntwo')).toBe(hashNoteInput('one\ntwo'))
+  })
+
+  it('loads batched snapshots in the same order and skips damaged or permanently deleted notes', async () => {
+    const dir = library()
+    const ids = Array.from({length:20}, (_, index) => saveNote(dir, `note ${index}`))
+    const legacyPath = join(dir, 'notes', `${ids[0]}.json`)
+    writeFileSync(legacyPath, '\uFEFF' + readFileSync(legacyPath, 'utf8'))
+    writeFileSync(join(dir, 'notes', `${ids[1]}.json`), '{')
+
+    const deletedPath = join(dir, 'notes', `${ids[2]}.json`)
+    const staleCopy = readFileSync(deletedPath)
+    expect(deleteNote(ids[2], dir)).toBe(true)
+    expect(deleteNoteForever(dir, ids[2])).toBe(true)
+    writeFileSync(deletedPath, staleCopy)
+
+    const notes = await loadNotesInBatches(dir)
+    expect(notes).toEqual(loadAllNotesFrom(dir))
+    expect(notes.map(note => note.id)).toEqual([ids[0], ...ids.slice(3)].reverse())
+    expect(await loadNotesInBatches(join(dir, 'missing'))).toEqual([])
   })
 })
